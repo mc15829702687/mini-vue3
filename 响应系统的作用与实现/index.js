@@ -2,13 +2,17 @@
 const data = {
   text: 'Hello Vue3'
 }
+// 3. 由于副作用函数名字是写死的，所以用 activeEffect 存储副作用函数
+let activeEffect;
 
 // 2. 对原始数据读取与设置
+// 存放副作用函数的桶
 let bucket = new Set();
 let obj = new Proxy(data, {
   get(target, key) {
+    if(!activeEffect) return;
     // 读取时将副作用函数放进桶里
-    bucket.add(effect);
+    bucket.add(activeEffect);
     return target[key]
   },
   set(target, key, value) {
@@ -21,12 +25,24 @@ let obj = new Proxy(data, {
   }
 })
 
-function effect() {
-  document.body.innerText = obj.text;
+
+// 匿名函数也能执行，不必依赖 effect 函数名
+function effect(fn) {
+  // 存储 副作用 函数
+  activeEffect = fn;
+  // 执行副作用函数
+  fn();
 }
 
-effect();
+
+// 匿名函数
+effect(() => {
+  console.log('run effect');
+  document.body.innerText = obj.text
+});
 
 window.setTimeout(() => {
-  obj.text = 'Change'
-}, 1000)
+  obj.noExits = 'Change'
+}, 1000);
+
+
