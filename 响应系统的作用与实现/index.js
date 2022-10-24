@@ -3,7 +3,8 @@ const data = {
   text: 'Hello Vue3',
   ok: true,
   bar: true,
-  foo: true
+  foo: true,
+  foo2: 1,    // 避免无线递归循环
 }
 // 3. 由于副作用函数名字是写死的，所以用 activeEffect 存储副作用函数
 let activeEffect;
@@ -31,47 +32,51 @@ let obj = new Proxy(data, {
 
 // 在 get 函数内调用 track 函数追踪变化
 function track(target, key) {
-   // 如果没有 activeEffect 直接 return
-   if(!activeEffect) return target[key];
-   // 从桶里取出 depsMap,它也是一个 Map 类型，key => effects
-   let depsMap = bucket.get(target);
-   if(!depsMap) {
-     bucket.set(target, (depsMap = new Map()))
-   }
-   // 再根据 key 从 depsMap 里取得 deps，它是一个 Set 类型的数据
-   // 是一个副作用函数的集合
-   let deps = depsMap.get(key);
-   if(!deps) {
-     depsMap.set(key, (deps = new Set()));
-   }
-   
-    // 读取时将副作用函数放进桶里
-    deps.add(activeEffect);
-    // deps 就是一个与当前副作用函数相关联的依赖集合
-    // 将其 push 到 activeEffect.deps 数组中
-    activeEffect.deps.push(deps);
+  // 如果没有 activeEffect 直接 return
+  if (!activeEffect) return target[key];
+  // 从桶里取出 depsMap,它也是一个 Map 类型，key => effects
+  let depsMap = bucket.get(target);
+  if (!depsMap) {
+    bucket.set(target, (depsMap = new Map()))
+  }
+  // 再根据 key 从 depsMap 里取得 deps，它是一个 Set 类型的数据
+  // 是一个副作用函数的集合
+  let deps = depsMap.get(key);
+  if (!deps) {
+    depsMap.set(key, (deps = new Set()));
+  }
+
+  // 读取时将副作用函数放进桶里
+  deps.add(activeEffect);
+  // deps 就是一个与当前副作用函数相关联的依赖集合
+  // 将其 push 到 activeEffect.deps 数组中
+  activeEffect.deps.push(deps);
 }
 
 
 // 执行桶中的副作用函数
 function trigger(target, key) {
- // 根据 target 从桶中取得 depsMap，它是：Key => effects
- const depsMap = bucket.get(target);
- if(!depsMap) return;
- // 取得副作用函数的集合
- const effects = depsMap.get(key)
-//  防止死循环，原因：副作用函数还没遍历完，就被收集了
- const effectsToRun = new Set(effects);
- effectsToRun.forEach(effectFn => effectFn())
- // 从桶里取出副作用函数并执行
-//  effects && effects.forEach(effectFn => effectFn());
+  // 根据 target 从桶中取得 depsMap，它是：Key => effects
+  const depsMap = bucket.get(target);
+  if (!depsMap) return;
+  // 取得副作用函数的集合
+  const effects = depsMap.get(key)
+  //  防止死循环，原因：副作用函数还没遍历完，就被收集了
+  const effectsToRun = new Set();
+  effects && effects.forEach(effectFn => {
+    if (activeEffect !== effectFn) {
+      effectsToRun.add(effectFn);
+    }
+  })
+  effectsToRun.forEach(effectFn => effectFn())
+  // 从桶里取出副作用函数并执行
+  //  effects && effects.forEach(effectFn => effectFn());
 }
 
 
 // 匿名函数也能执行，不必依赖 effect 函数名
 // 问题：分支切换会造成每次不必要的副作用函数执行
 // 解决方法：每次副作用函数执行时，清除与之关联的依赖集合，副作用函数执行完后，重新建立连接
-
 function effect(fn) {
   const effectFn = () => {
     // 调用 cleanup 完成清除工作
@@ -95,7 +100,7 @@ function effect(fn) {
 }
 
 function cleanup(effectFn) {
-  for(let i = 0; i < effectFn.deps.length; i++) {
+  for (let i = 0; i < effectFn.deps.length; i++) {
     // deps 是依赖集合
     const deps = effectFn.deps[i];
     // 将 effectFn 从依赖集合中移除
@@ -129,24 +134,32 @@ function cleanup(effectFn) {
 // }, 3000);
 
 // 4. 嵌套副作用函数，组件嵌套使用本质上就是嵌套的副作用函数
-let temp1, temp2;
-effect(function effectFn1() {
-  console.log('run effectFn1');
+// let temp1, temp2;
+// effect(function effectFn1() {
+//   console.log('run effectFn1');
 
-  // 嵌套的副作用函数
-  effect(function effectFn2() {
-    console.log('run effectFn2');
+//   // 嵌套的副作用函数
+//   effect(function effectFn2() {
+//     console.log('run effectFn2');
 
-    // 读取bar的值
-    temp2 = obj.bar;
-  })
+//     // 读取bar的值
+//     temp2 = obj.bar;
+//   })
 
-  temp1 = obj.foo;
+//   temp1 = obj.foo;
+// })
+
+// window.setTimeout(() => {
+//   // 只会走里层的副作用函数，原因是 activeEffect 只有一个，里层副作用函数会在执行时覆盖顶层的副作用函数
+//   // 解决方法：创建一个副作用函数栈，执行的时候存入栈中，执行完毕后剔除
+//   obj.foo = false;
+// }, 1000);
+
+// 5. 避免无限递归执行
+effect(() => {
+  // Uncaught RangeError: Maximum call stack size exceeded
+  // 原因：obj.foo2 = obj.foo2 + 1，边放入桶中，边拿出来执行，副作用函数，还没执行完毕就又开始下一次的执行
+  // 解决方法：加个守卫条件，当前副作用函数和正在执行的副作用函数不是同一函数则执行
+  obj.foo2++;
 })
-
-window.setTimeout(() => {
-  // 只会走里层的副作用函数，原因是 activeEffect 只有一个，里层副作用函数会在执行时覆盖顶层的副作用函数
-  // 解决方法：创建一个副作用函数栈，执行的时候存入栈中，执行完毕后剔除
-  obj.foo = false;
-}, 1000);
 
