@@ -68,16 +68,22 @@ function trigger(target, key) {
       effectsToRun.add(effectFn);
     }
   })
-  effectsToRun.forEach(effectFn => effectFn())
+  effectsToRun.forEach(effectFn => {
+    // 如果存在调度器，先执行调度器，否则原样执行
+    if (effectFn.options.scheduler) {
+      effectFn.options.scheduler(effectFn);
+    } else {
+      effectFn();
+    }
+  })
   // 从桶里取出副作用函数并执行
   //  effects && effects.forEach(effectFn => effectFn());
 }
 
-
 // 匿名函数也能执行，不必依赖 effect 函数名
 // 问题：分支切换会造成每次不必要的副作用函数执行
 // 解决方法：每次副作用函数执行时，清除与之关联的依赖集合，副作用函数执行完后，重新建立连接
-function effect(fn) {
+function effect(fn, options = {}) {
   const effectFn = () => {
     // 调用 cleanup 完成清除工作
     cleanup(effectFn);
@@ -95,6 +101,8 @@ function effect(fn) {
 
   // 用来存储所有与副作用函数相关联的依赖集合
   effectFn.deps = [];
+  // 将配置项挂载到副作用函数上
+  effectFn.options = options;
   // 执行副作用函数
   effectFn();
 }
@@ -155,11 +163,56 @@ function cleanup(effectFn) {
 //   obj.foo = false;
 // }, 1000);
 
-// 5. 避免无限递归执行
+// // 5. 避免无限递归执行
+// effect(() => {
+//   // Uncaught RangeError: Maximum call stack size exceeded
+//   // 原因：obj.foo2 = obj.foo2 + 1，边放入桶中，边拿出来执行，副作用函数，还没执行完毕就又开始下一次的执行
+//   // 解决方法：加个守卫条件，当前副作用函数和正在执行的副作用函数不是同一函数则执行
+//   obj.foo2++;
+// })
+
+// 6. 调度执行
+// 6.1 执行顺序
+// effect(() => {
+//   console.log(obj.foo2);
+// }, {
+//   scheduler(fn) {
+//     setTimeout(fn)
+//   }
+// })
+// 6.2 执行次数
+// 定义一个任务队列
+const jobQueue = new Set();
+// 使用 Promise.resolve() 创建一个 promise 实例，用它将一个任务添加到微任务队列
+const p = Promise.resolve();
+
+// 一个标志代表是否正在刷新任务队列
+let isFlushing = false;
+function flushJob() {
+  // 如果正在刷新任务队列，什么也不做
+  if (isFlushing) return;
+  // 代表正在刷新任务队列
+  isFlushing = true;
+  // 在微任务队列中刷新 jobQueue 队列
+  p.then(() => {
+    jobQueue.forEach(job => job());
+  }).finally(() => {
+    isFlushing = false;
+  })
+}
+
 effect(() => {
-  // Uncaught RangeError: Maximum call stack size exceeded
-  // 原因：obj.foo2 = obj.foo2 + 1，边放入桶中，边拿出来执行，副作用函数，还没执行完毕就又开始下一次的执行
-  // 解决方法：加个守卫条件，当前副作用函数和正在执行的副作用函数不是同一函数则执行
-  obj.foo2++;
+  console.log(obj.foo2);
+}, {
+  scheduler(fn) {
+    // 每次调度时，将副作用函数添加到 jobQueue队列中
+    jobQueue.add(fn);
+    // 调用 flushJob 刷新队列
+    flushJob();
+  }
 })
+
+obj.foo2++;
+// console.log('结束了');
+obj.foo2++;
 
