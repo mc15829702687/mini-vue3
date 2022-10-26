@@ -92,19 +92,27 @@ function effect(fn, options = {}) {
     // 在副作用函数执行前，将当前副作用函数压入栈中
     effectStack.push(activeEffect);
     // 执行副作用函数
-    fn();
+    const res = fn();
     // 待副作用函数执行完后，将当前副作用函数弹出栈中，并把 activeEffect 还原为之前的值
     effectStack.pop();
     // 重新赋值
     activeEffect = effectStack[effectStack.length - 1];
+    return res;
   }
 
   // 用来存储所有与副作用函数相关联的依赖集合
   effectFn.deps = [];
   // 将配置项挂载到副作用函数上
   effectFn.options = options;
-  // 执行副作用函数
-  effectFn();
+
+  // 只有非 lazy 时才执行副作用函数
+  if (!options.lazy) {
+    effectFn();
+  }
+
+  // 返回副作用函数
+  return effectFn;
+
 }
 
 function cleanup(effectFn) {
@@ -201,18 +209,77 @@ function flushJob() {
   })
 }
 
-effect(() => {
-  console.log(obj.foo2);
-}, {
-  scheduler(fn) {
-    // 每次调度时，将副作用函数添加到 jobQueue队列中
-    jobQueue.add(fn);
-    // 调用 flushJob 刷新队列
-    flushJob();
-  }
-})
+// effect(() => {
+//   console.log(obj.foo2);
+// }, {
+//   scheduler(fn) {
+//     // 每次调度时，将副作用函数添加到 jobQueue队列中
+//     jobQueue.add(fn);
+//     // 调用 flushJob 刷新队列
+//     flushJob();
+//   }
+// })
 
-obj.foo2++;
-// console.log('结束了');
-obj.foo2++;
+// obj.foo2++;
+// // console.log('结束了');
+// obj.foo2++;
+
+// 7. computed 与 lazy
+// 需求：effect 函数 都是立即执行的，如今不需要立即执行，用户自己手动执行
+// 解决方法：effect 函数，增加配置项 lazy，为 true 时，延缓执行
+// const lazyEffect = effect(() => obj.foo + obj.bar, {
+//   lazy: true
+// })
+// const val = lazyEffect();
+// console.log('val', val);
+
+// 实现 computed 函数
+function computed(getter) {
+  // 用来记录上一次的值
+  let value;
+  // 用来判断是否需要重新调用副作用函数，true 就意味着脏，代表重新计算
+  let dirty = true;
+
+  // 将 getter 做为副作用函数
+  const effectFn = effect(getter, {
+    lazy: true,
+    scheduler() {
+      dirty = true;
+      // 当计算属性的响应式数据发生变化时，手动调用 trigger 函数触发响应
+      trigger(obj, 'value')
+    }
+  })
+
+  const obj = {
+    get value() {
+      // 只有当 dirty 为 true 时，才需要重新计算
+      if (dirty) {
+        value = effectFn();
+        // 将 dirty 设置为 false，下次直接访问上次缓存的值
+        dirty = true;
+        // 当读取时，手动调用 track 函数进行追踪
+        track(obj, 'value');
+      }
+      return value;
+    }
+  }
+
+  return obj;
+}
+
+const sumRes = computed(() => obj.foo + obj.bar);
+// console.log(sumRes.value);
+// obj.foo++;
+
+// console.log(sumRes.value);
+
+// 需求：当响应式数据变化时，副作用函数要重新执行一遍
+// 解决方法：读取时，手动调用 track 函数进行追踪；数据变化时，手动调用 trigger 函数触发响应
+effect(() => {
+  console.log(sumRes.value);
+})
+obj.foo++;
+// console.log(sumRes.value);
+// console.log(sumRes.value);
+
 
