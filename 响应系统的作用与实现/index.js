@@ -267,7 +267,7 @@ function computed(getter) {
   return obj;
 }
 
-const sumRes = computed(() => obj.foo + obj.bar);
+// const sumRes = computed(() => obj.foo + obj.bar);
 // console.log(sumRes.value);
 // obj.foo++;
 
@@ -275,11 +275,60 @@ const sumRes = computed(() => obj.foo + obj.bar);
 
 // 需求：当响应式数据变化时，副作用函数要重新执行一遍
 // 解决方法：读取时，手动调用 track 函数进行追踪；数据变化时，手动调用 trigger 函数触发响应
-effect(() => {
-  console.log(sumRes.value);
+// effect(() => {
+//   console.log(sumRes.value);
+// })
+// obj.foo++;
+// console.log(sumRes.value);
+// console.log(sumRes.value);
+
+// 8. watch 函数
+function traverse(value, seen = new Set()) {
+  // 如果要读取的数据是原始类型，或者已经被读取过了，什么也不做
+  if (typeof value !== 'object' || value === null || seen.has(value)) return;
+  // 将数据添加到 seen 中，表示已经读取过了
+  seen.add(value);
+  // 如果是对象，则递归调用
+  for (let key in value) {
+    traverse(value[key], seen)
+  }
+
+  return value;
+}
+function watch(source, cb) {
+  // 定义 getter
+  let getter;
+  if (typeof source === 'function') {
+    // 如果 source 是函数，说明用户传递的是 getter，则直接把 source 赋值给 getter
+    getter = source;
+  } else {
+    // 调用 traverse函数递归的读取每个属性，做依赖追踪
+    getter = () => traverse(source)
+  }
+
+  // 定义旧值与新值
+  let newValue, oldValue;
+  const effectFn = effect(getter, {
+    lazy: true,
+    scheduler() {
+      // 在 scheduler 中重新执行副作用函数，得到的是新值
+      newValue = effectFn();
+      // 将新值和旧值作为回调参数
+      cb(newValue, oldValue);
+      // 更新旧值
+      oldValue = newValue;
+    }
+  })
+  // 手动调用副作用函数拿到第一次的旧值
+  oldValue = effectFn();
+}
+
+watch(obj, (newValue, oldValue) => {
+  console.log('数据变化了1', newValue, oldValue);
 })
+// watch(() => obj.bar, (newValue, oldValue) => {
+//   console.log('数据bar变化了', newValue, oldValue);
+// })
+
 obj.foo++;
-// console.log(sumRes.value);
-// console.log(sumRes.value);
-
-
+// obj.bar++;
