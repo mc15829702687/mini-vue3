@@ -306,12 +306,24 @@ function watch(source, cb, options = {}) {
     getter = () => traverse(source)
   }
 
+  // 定义存储过期回调函数
+  let cleanup;
+
+  const onInvalidate = (fn) => {
+    // 将过期回调存储到 cleanup 中
+    cleanup = fn;
+  }
+
   // 调度执行函数
   const job = () => {
     // 在 scheduler 中重新执行副作用函数，得到的是新值
     newValue = effectFn();
+    // 在调用回调函数前先执行过期回调
+    if (cleanup) {
+      cleanup();
+    }
     // 将新值和旧值作为回调参数
-    cb(newValue, oldValue);
+    cb(newValue, oldValue, onInvalidate);
     // 更新旧值
     oldValue = newValue;
   }
@@ -340,20 +352,44 @@ function watch(source, cb, options = {}) {
   }
 }
 
-watch(obj, (newValue, oldValue) => {
-  console.log('数据变化了1', newValue, oldValue);
-}, {
-  // immediate: true,
-  // pre: watch 创建时立即执行，涉及组件更新机制
-  // post: 放到微任务队列中，组件更新结束再执行
-  // sync: 同步执行
-  flush: 'post',
-})
+// watch(obj, (newValue, oldValue) => {
+//   console.log('数据变化了1', newValue, oldValue);
+// }, {
+//   // immediate: true,
+//   // pre: watch 创建时立即执行，涉及组件更新机制
+//   // post: 放到微任务队列中，组件更新结束再执行
+//   // sync: 同步执行
+//   flush: 'post',
+// })
 // watch(() => obj.bar, (newValue, oldValue) => {
 //   console.log('数据bar变化了', newValue, oldValue);
 // })
 
-obj.foo++;
+// obj.foo++;
 // obj.bar++;
 
 // 9. 立即执行的 watch 和 回调执行的时机
+
+// 10. 过期的副作用函数-静态问题
+let finalData
+watch(obj, async (newVal, oldVal, onInvalidate) => {
+  // 定义一个标志，代表当前副作用函数是否过期
+  let expired = false;
+  // 调用 onInvalidate() 函数注册一个过期回调
+  onInvalidate(() => {
+    expired = true;
+  })
+
+  // 发送网络请求
+  const res = await fetch('/path/to/request');
+
+  // 只有当副作用函数的执行没有过期时，才会执行后续操作
+  if (!expired) {
+    finalData = res;
+  }
+})
+obj.foo++;
+window.setTimeout(() => {
+  obj.foo++;
+}, 200)
+console.log('finalData', finalData);
