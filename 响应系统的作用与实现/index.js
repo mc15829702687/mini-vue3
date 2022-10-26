@@ -295,7 +295,7 @@ function traverse(value, seen = new Set()) {
 
   return value;
 }
-function watch(source, cb) {
+function watch(source, cb, options = {}) {
   // 定义 getter
   let getter;
   if (typeof source === 'function') {
@@ -306,25 +306,48 @@ function watch(source, cb) {
     getter = () => traverse(source)
   }
 
+  // 调度执行函数
+  const job = () => {
+    // 在 scheduler 中重新执行副作用函数，得到的是新值
+    newValue = effectFn();
+    // 将新值和旧值作为回调参数
+    cb(newValue, oldValue);
+    // 更新旧值
+    oldValue = newValue;
+  }
+
   // 定义旧值与新值
   let newValue, oldValue;
   const effectFn = effect(getter, {
     lazy: true,
     scheduler() {
-      // 在 scheduler 中重新执行副作用函数，得到的是新值
-      newValue = effectFn();
-      // 将新值和旧值作为回调参数
-      cb(newValue, oldValue);
-      // 更新旧值
-      oldValue = newValue;
+      // flush 为 post，放到 微任务队列中执行
+      if (options.flush === 'post') {
+        const p = Promise.resolve();
+        p.then(job)
+      } else {
+        job();
+      }
     }
   })
-  // 手动调用副作用函数拿到第一次的旧值
-  oldValue = effectFn();
+
+  if (options.immediate) {
+    // 当 immediate 为 true 时，直接执行 job，从而触发回调执行
+    job()
+  } else {
+    // 手动调用副作用函数拿到第一次的旧值
+    oldValue = effectFn();
+  }
 }
 
 watch(obj, (newValue, oldValue) => {
   console.log('数据变化了1', newValue, oldValue);
+}, {
+  // immediate: true,
+  // pre: watch 创建时立即执行，涉及组件更新机制
+  // post: 放到微任务队列中，组件更新结束再执行
+  // sync: 同步执行
+  flush: 'post',
 })
 // watch(() => obj.bar, (newValue, oldValue) => {
 //   console.log('数据bar变化了', newValue, oldValue);
@@ -332,3 +355,5 @@ watch(obj, (newValue, oldValue) => {
 
 obj.foo++;
 // obj.bar++;
+
+// 9. 立即执行的 watch 和 回调执行的时机
