@@ -1,34 +1,75 @@
 // 1. 副作用函数-产生副作用影响的函数，包括全局变量修改，全局属性修改等
+// const data = {
+//   text: "Hello Vue3",
+//   ok: true,
+//   bar: true,
+//   foo: true,
+//   foo2: 1, // 避免无线递归循环
+//   get baz() {
+//     return this.foo;
+//   },
+// };
 const data = {
-  text: 'Hello Vue3',
-  ok: true,
-  bar: true,
-  foo: true,
-  foo2: 1,    // 避免无线递归循环
-}
+  foo: 1,
+};
 // 3. 由于副作用函数名字是写死的，所以用 activeEffect 存储副作用函数
 let activeEffect;
 // 副作用函数栈
 let effectStack = [];
 
+let ITERATE_KEY = Symbol();
+
 // 2. 对原始数据读取与设置
 // 存放副作用函数的桶
 let bucket = new WeakMap();
 let obj = new Proxy(data, {
-  get(target, key) {
+  get(target, key, receiver) {
     // 将副作用函数存储到 桶中
     track(target, key);
 
-    return target[key]
+    // 使用 Reflect 解决 this 指向
+    return Reflect.get(target, key, receiver);
+    // return target[key];
   },
-  set(target, key, value) {
+  set(target, key, value, receiver) {
+    // 如果属性不存在，则说明是新增，否则是修改属性
+    const type = Object.prototype.hasOwnProperty.call(target, key)
+      ? "SET"
+      : "ADD";
     // 先付新值
-    target[key] = value;
+    // 使用 Reflect 解决 this 指向
+    Reflect.set(target, key, value, receiver);
+    // target[key] = value;
     // 取出桶中的副作用函数，并执行
-    trigger(target, key);
+    // 将 type 作为第三个参数传递给 trigger 函数
+    trigger(target, key, type);
     return true;
-  }
-})
+  },
+  // key in obj, in 操作符建立连接
+  has(target, key) {
+    track(target, key);
+    return Reflect.has(target, key);
+  },
+  // for...in
+  ownKeys(target) {
+    // 将 副作用函数与 ITERATE_KEY 关联
+    track(target, ITERATE_KEY);
+    return Reflect.ownKeys(target);
+  },
+  // delete 操作
+  deleteProperty(target, key) {
+    // 检查对象上是否存在该属性
+    const hadKey = Object.prototype.hasOwnProperty.call(target, key);
+    // 完成对属性的删除
+    const res = Reflect.deleteProperty(target, key);
+
+    // 只有上述两个条件都成立时，才触发更新
+    if (hadKey && res) {
+      trigger(target, key, "DELETE");
+    }
+    return res;
+  },
+});
 
 // 在 get 函数内调用 track 函数追踪变化
 function track(target, key) {
@@ -37,7 +78,7 @@ function track(target, key) {
   // 从桶里取出 depsMap,它也是一个 Map 类型，key => effects
   let depsMap = bucket.get(target);
   if (!depsMap) {
-    bucket.set(target, (depsMap = new Map()))
+    bucket.set(target, (depsMap = new Map()));
   }
   // 再根据 key 从 depsMap 里取得 deps，它是一个 Set 类型的数据
   // 是一个副作用函数的集合
@@ -53,29 +94,43 @@ function track(target, key) {
   activeEffect.deps.push(deps);
 }
 
-
 // 执行桶中的副作用函数
-function trigger(target, key) {
+function trigger(target, key, type) {
   // 根据 target 从桶中取得 depsMap，它是：Key => effects
   const depsMap = bucket.get(target);
   if (!depsMap) return;
   // 取得副作用函数的集合
-  const effects = depsMap.get(key)
+  const effects = depsMap.get(key);
+
   //  防止死循环，原因：副作用函数还没遍历完，就被收集了
   const effectsToRun = new Set();
-  effects && effects.forEach(effectFn => {
-    if (activeEffect !== effectFn) {
-      effectsToRun.add(effectFn);
-    }
-  })
-  effectsToRun.forEach(effectFn => {
+  effects &&
+    effects.forEach((effectFn) => {
+      if (activeEffect !== effectFn) {
+        effectsToRun.add(effectFn);
+      }
+    });
+
+  if (type === "ADD" || type === "DELETE") {
+    // 取得与 ITERATE_KEY 相关联的副作用函数
+    const iterateEffects = depsMap.get(ITERATE_KEY);
+    // 将与 ITERATE_KEY 相关联的副作用函数也添加到 effectsToRun 里
+    iterateEffects &&
+      iterateEffects.forEach((effectFn) => {
+        if (activeEffect !== effectFn) {
+          effectsToRun.add(effectFn);
+        }
+      });
+  }
+
+  effectsToRun.forEach((effectFn) => {
     // 如果存在调度器，先执行调度器，否则原样执行
     if (effectFn.options.scheduler) {
       effectFn.options.scheduler(effectFn);
     } else {
       effectFn();
     }
-  })
+  });
   // 从桶里取出副作用函数并执行
   //  effects && effects.forEach(effectFn => effectFn());
 }
@@ -98,7 +153,7 @@ function effect(fn, options = {}) {
     // 重新赋值
     activeEffect = effectStack[effectStack.length - 1];
     return res;
-  }
+  };
 
   // 用来存储所有与副作用函数相关联的依赖集合
   effectFn.deps = [];
@@ -112,7 +167,6 @@ function effect(fn, options = {}) {
 
   // 返回副作用函数
   return effectFn;
-
 }
 
 function cleanup(effectFn) {
@@ -126,68 +180,6 @@ function cleanup(effectFn) {
   effectFn.deps.length = 0;
 }
 
-
-// // 匿名副作用函数
-// effect(() => {
-//   // 分支切换与cleanup
-//   console.log('run effect');
-//   document.body.innerText = obj.ok ? obj.text : 'not'
-// });
-
-
-// window.setTimeout(() => {
-//   // 如果我们设置了一个不存在的属性，由于读取与设置机制，副作用函数依旧会执行两次
-//   // 解决方法：自己的 key 对应，自己的副作用函数
-//   obj.noExits = 'Change'
-// }, 1000);
-
-// window.setTimeout(() => {
-//   obj.ok = false
-// }, 2000);
-
-// window.setTimeout(() => {
-//   obj.text = 'Change'
-// }, 3000);
-
-// 4. 嵌套副作用函数，组件嵌套使用本质上就是嵌套的副作用函数
-// let temp1, temp2;
-// effect(function effectFn1() {
-//   console.log('run effectFn1');
-
-//   // 嵌套的副作用函数
-//   effect(function effectFn2() {
-//     console.log('run effectFn2');
-
-//     // 读取bar的值
-//     temp2 = obj.bar;
-//   })
-
-//   temp1 = obj.foo;
-// })
-
-// window.setTimeout(() => {
-//   // 只会走里层的副作用函数，原因是 activeEffect 只有一个，里层副作用函数会在执行时覆盖顶层的副作用函数
-//   // 解决方法：创建一个副作用函数栈，执行的时候存入栈中，执行完毕后剔除
-//   obj.foo = false;
-// }, 1000);
-
-// // 5. 避免无限递归执行
-// effect(() => {
-//   // Uncaught RangeError: Maximum call stack size exceeded
-//   // 原因：obj.foo2 = obj.foo2 + 1，边放入桶中，边拿出来执行，副作用函数，还没执行完毕就又开始下一次的执行
-//   // 解决方法：加个守卫条件，当前副作用函数和正在执行的副作用函数不是同一函数则执行
-//   obj.foo2++;
-// })
-
-// 6. 调度执行
-// 6.1 执行顺序
-// effect(() => {
-//   console.log(obj.foo2);
-// }, {
-//   scheduler(fn) {
-//     setTimeout(fn)
-//   }
-// })
 // 6.2 执行次数
 // 定义一个任务队列
 const jobQueue = new Set();
@@ -203,35 +195,11 @@ function flushJob() {
   isFlushing = true;
   // 在微任务队列中刷新 jobQueue 队列
   p.then(() => {
-    jobQueue.forEach(job => job());
+    jobQueue.forEach((job) => job());
   }).finally(() => {
     isFlushing = false;
-  })
+  });
 }
-
-// effect(() => {
-//   console.log(obj.foo2);
-// }, {
-//   scheduler(fn) {
-//     // 每次调度时，将副作用函数添加到 jobQueue队列中
-//     jobQueue.add(fn);
-//     // 调用 flushJob 刷新队列
-//     flushJob();
-//   }
-// })
-
-// obj.foo2++;
-// // console.log('结束了');
-// obj.foo2++;
-
-// 7. computed 与 lazy
-// 需求：effect 函数 都是立即执行的，如今不需要立即执行，用户自己手动执行
-// 解决方法：effect 函数，增加配置项 lazy，为 true 时，延缓执行
-// const lazyEffect = effect(() => obj.foo + obj.bar, {
-//   lazy: true
-// })
-// const val = lazyEffect();
-// console.log('val', val);
 
 // 实现 computed 函数
 function computed(getter) {
@@ -246,9 +214,9 @@ function computed(getter) {
     scheduler() {
       dirty = true;
       // 当计算属性的响应式数据发生变化时，手动调用 trigger 函数触发响应
-      trigger(obj, 'value')
-    }
-  })
+      trigger(obj, "value");
+    },
+  });
 
   const obj = {
     get value() {
@@ -258,39 +226,24 @@ function computed(getter) {
         // 将 dirty 设置为 false，下次直接访问上次缓存的值
         dirty = true;
         // 当读取时，手动调用 track 函数进行追踪
-        track(obj, 'value');
+        track(obj, "value");
       }
       return value;
-    }
-  }
+    },
+  };
 
   return obj;
 }
 
-// const sumRes = computed(() => obj.foo + obj.bar);
-// console.log(sumRes.value);
-// obj.foo++;
-
-// console.log(sumRes.value);
-
-// 需求：当响应式数据变化时，副作用函数要重新执行一遍
-// 解决方法：读取时，手动调用 track 函数进行追踪；数据变化时，手动调用 trigger 函数触发响应
-// effect(() => {
-//   console.log(sumRes.value);
-// })
-// obj.foo++;
-// console.log(sumRes.value);
-// console.log(sumRes.value);
-
 // 8. watch 函数
 function traverse(value, seen = new Set()) {
   // 如果要读取的数据是原始类型，或者已经被读取过了，什么也不做
-  if (typeof value !== 'object' || value === null || seen.has(value)) return;
+  if (typeof value !== "object" || value === null || seen.has(value)) return;
   // 将数据添加到 seen 中，表示已经读取过了
   seen.add(value);
   // 如果是对象，则递归调用
   for (let key in value) {
-    traverse(value[key], seen)
+    traverse(value[key], seen);
   }
 
   return value;
@@ -298,12 +251,12 @@ function traverse(value, seen = new Set()) {
 function watch(source, cb, options = {}) {
   // 定义 getter
   let getter;
-  if (typeof source === 'function') {
+  if (typeof source === "function") {
     // 如果 source 是函数，说明用户传递的是 getter，则直接把 source 赋值给 getter
     getter = source;
   } else {
     // 调用 traverse函数递归的读取每个属性，做依赖追踪
-    getter = () => traverse(source)
+    getter = () => traverse(source);
   }
 
   // 定义存储过期回调函数
@@ -312,7 +265,7 @@ function watch(source, cb, options = {}) {
   const onInvalidate = (fn) => {
     // 将过期回调存储到 cleanup 中
     cleanup = fn;
-  }
+  };
 
   // 调度执行函数
   const job = () => {
@@ -326,7 +279,7 @@ function watch(source, cb, options = {}) {
     cb(newValue, oldValue, onInvalidate);
     // 更新旧值
     oldValue = newValue;
-  }
+  };
 
   // 定义旧值与新值
   let newValue, oldValue;
@@ -334,62 +287,55 @@ function watch(source, cb, options = {}) {
     lazy: true,
     scheduler() {
       // flush 为 post，放到 微任务队列中执行
-      if (options.flush === 'post') {
+      if (options.flush === "post") {
         const p = Promise.resolve();
-        p.then(job)
+        p.then(job);
       } else {
         job();
       }
-    }
-  })
+    },
+  });
 
   if (options.immediate) {
     // 当 immediate 为 true 时，直接执行 job，从而触发回调执行
-    job()
+    job();
   } else {
     // 手动调用副作用函数拿到第一次的旧值
     oldValue = effectFn();
   }
 }
 
-// watch(obj, (newValue, oldValue) => {
-//   console.log('数据变化了1', newValue, oldValue);
-// }, {
-//   // immediate: true,
-//   // pre: watch 创建时立即执行，涉及组件更新机制
-//   // post: 放到微任务队列中，组件更新结束再执行
-//   // sync: 同步执行
-//   flush: 'post',
-// })
-// watch(() => obj.bar, (newValue, oldValue) => {
-//   console.log('数据bar变化了', newValue, oldValue);
-// })
+// 二、非原始值的响应式方法
+// 1. 使用 Reflect 解决代理对象 this 指向问题
+// effect(() => {
+//   console.log(obj.baz);
+// });
 
 // obj.foo++;
-// obj.bar++;
 
-// 9. 立即执行的 watch 和 回调执行的时机
+// 2. 如何代理 Object
+/**
+ * 对一个普通对象的读取操作：
+ * 1) 访问属性：obj.foo
+ * 2) 判断对象或原型上是否存在给定的 key: key in obj
+ * 3) 使用 for...in 循环遍历对象: for(const key in obj) {}
+ */
+// effect(() => {
+//   if ("foo" in obj) {
+//     console.log("foo in obj");
+//   }
+// });
 
-// 10. 过期的副作用函数-静态问题
-let finalData
-watch(obj, async (newVal, oldVal, onInvalidate) => {
-  // 定义一个标志，代表当前副作用函数是否过期
-  let expired = false;
-  // 调用 onInvalidate() 函数注册一个过期回调
-  onInvalidate(() => {
-    expired = true;
-  })
-
-  // 发送网络请求
-  const res = await fetch('/path/to/request');
-
-  // 只有当副作用函数的执行没有过期时，才会执行后续操作
-  if (!expired) {
-    finalData = res;
+// for...in 循环
+effect(() => {
+  for (const key in obj) {
+    console.log("run effect, key: ", key);
   }
-})
-// obj.foo++;
-// window.setTimeout(() => {
-//   obj.foo++;
-// }, 200)
-// console.log('finalData', finalData);
+});
+
+// add
+// obj.bar = true;
+// set
+// obj.foo = 2;
+// delete
+delete obj.foo;
