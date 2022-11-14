@@ -22,16 +22,27 @@ let ITERATE_KEY = Symbol();
 // 2. 对原始数据读取与设置
 // 存放副作用函数的桶
 let bucket = new WeakMap();
-// 封装 createReactive 函数，接收一个 isShallow 参数，代表是否是浅响应
-const createReactive = (data, isShallow = false) => {
+/**
+ * 
+// 封装 createReactive 函数
+ * @param {*} data 
+ * @param {代表是否是浅响应} isShallow 
+ * @param {代表是否是只读，只读在set和Del时打印警告} isReadOnly 
+ * @returns 
+ */
+const createReactive = (data, isShallow = false, isReadOnly = false) => {
   return new Proxy(data, {
     get(target, key, receiver) {
       // 代理对象可以通过 raw 属性访问原始数据
       if (key === 'raw') {
         return target;
       }
-      // 将副作用函数存储到 桶中
-      track(target, key);
+
+      // 非只读建立响应连接
+      if (!isReadOnly) {
+        // 将副作用函数存储到 桶中
+        track(target, key);
+      }
 
       // 使用 Reflect 解决 this 指向
       const res = Reflect.get(target, key, receiver);
@@ -43,12 +54,19 @@ const createReactive = (data, isShallow = false) => {
 
       // 深响应
       if (typeof res === 'object' && res !== null) {
-        return reactive(res);
+        // 如果数据为只读，则调用 readOnly 进行递归调用
+        return isReadOnly ? readOnly(res) : reactive(res);
       }
       return res;
       // return target[key];
     },
     set(target, key, value, receiver) {
+      // 如果是只读选项，打印警告并返回
+      if (isReadOnly) {
+        console.warn(`属性${key}是只读的`);
+        return true;
+      }
+
       const oldVal = target[key];
       // 如果属性不存在，则说明是新增，否则是修改属性
       const type = Object.prototype.hasOwnProperty.call(target, key)
@@ -83,6 +101,11 @@ const createReactive = (data, isShallow = false) => {
     },
     // delete 操作
     deleteProperty(target, key) {
+      // 如果是只读选项，打印警告并返回
+      if (isReadOnly) {
+        console.warn(`属性${key}是只读的`);
+        return true;
+      }
       // 检查对象上是否存在该属性
       const hadKey = Object.prototype.hasOwnProperty.call(target, key);
       // 完成对属性的删除
@@ -394,11 +417,23 @@ const reactive = (data) => {
 const shallowReactive = (data) => {
   return createReactive(data, true);
 }
-const obj = reactive({ foo: { bar: 1 } });
-const shallowObj = shallowReactive({ foo: { bar: 1 } });
+// const obj = reactive({ foo: { bar: 1 } });
+// const shallowObj = shallowReactive({ foo: { bar: 1 } });
 
+
+// obj.foo.bar = 2;
+// obj.foo = { bar: 3 }
+
+// 5. 只读和浅只读
+function readOnly(data) {
+  return createReactive(data, false, true);
+}
+function shallowReadOnly(data) {
+  return createReactive(data, true, true);
+}
+// const obj = readOnly({ foo: { bar: 1 } });
+const obj = shallowReadOnly({ foo: { bar: 1 } });
 effect(() => {
   console.log(obj.foo.bar);
 })
 obj.foo.bar = 2;
-obj.foo = { bar: 3 }
