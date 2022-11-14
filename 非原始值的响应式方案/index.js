@@ -9,9 +9,9 @@
 //     return this.foo;
 //   },
 // };
-const data = {
-  foo: 1,
-};
+// const data = {
+//   foo: 1,
+// };
 // 3. 由于副作用函数名字是写死的，所以用 activeEffect 存储副作用函数
 let activeEffect;
 // 副作用函数栈
@@ -22,54 +22,68 @@ let ITERATE_KEY = Symbol();
 // 2. 对原始数据读取与设置
 // 存放副作用函数的桶
 let bucket = new WeakMap();
-let obj = new Proxy(data, {
-  get(target, key, receiver) {
-    // 将副作用函数存储到 桶中
-    track(target, key);
+const reactive = (data) => {
+  return new Proxy(data, {
+    get(target, key, receiver) {
+      // 代理对象可以通过 raw 属性访问原始数据
+      if (key === 'raw') {
+        return target;
+      }
+      // 将副作用函数存储到 桶中
+      track(target, key);
 
-    // 使用 Reflect 解决 this 指向
-    return Reflect.get(target, key, receiver);
-    // return target[key];
-  },
-  set(target, key, value, receiver) {
-    // 如果属性不存在，则说明是新增，否则是修改属性
-    const type = Object.prototype.hasOwnProperty.call(target, key)
-      ? "SET"
-      : "ADD";
-    // 先付新值
-    // 使用 Reflect 解决 this 指向
-    Reflect.set(target, key, value, receiver);
-    // target[key] = value;
-    // 取出桶中的副作用函数，并执行
-    // 将 type 作为第三个参数传递给 trigger 函数
-    trigger(target, key, type);
-    return true;
-  },
-  // key in obj, in 操作符建立连接
-  has(target, key) {
-    track(target, key);
-    return Reflect.has(target, key);
-  },
-  // for...in
-  ownKeys(target) {
-    // 将 副作用函数与 ITERATE_KEY 关联
-    track(target, ITERATE_KEY);
-    return Reflect.ownKeys(target);
-  },
-  // delete 操作
-  deleteProperty(target, key) {
-    // 检查对象上是否存在该属性
-    const hadKey = Object.prototype.hasOwnProperty.call(target, key);
-    // 完成对属性的删除
-    const res = Reflect.deleteProperty(target, key);
+      // 使用 Reflect 解决 this 指向
+      return Reflect.get(target, key, receiver);
+      // return target[key];
+    },
+    set(target, key, value, receiver) {
+      const oldVal = target[key];
+      // 如果属性不存在，则说明是新增，否则是修改属性
+      const type = Object.prototype.hasOwnProperty.call(target, key)
+        ? "SET"
+        : "ADD";
+      // 先付新值
+      // 使用 Reflect 解决 this 指向
+      Reflect.set(target, key, value, receiver);
+      // target[key] = value;
+      // 取出桶中的副作用函数，并执行
+      // target === receiver.raw，说明 receiver 就是 target 的代理对象
+      if (receiver.raw === target) {
+        // 当旧值与新值不一样时，才触发副作用函数，并且旧值和新值不都是 NaN
+        if (oldVal !== value && oldVal === oldVal && value === value) {
+          // 将 type 作为第三个参数传递给 trigger 函数
+          trigger(target, key, type);
+        }
+      }
 
-    // 只有上述两个条件都成立时，才触发更新
-    if (hadKey && res) {
-      trigger(target, key, "DELETE");
-    }
-    return res;
-  },
-});
+      return true;
+    },
+    // key in obj, in 操作符建立连接
+    has(target, key) {
+      track(target, key);
+      return Reflect.has(target, key);
+    },
+    // for...in
+    ownKeys(target) {
+      // 将 副作用函数与 ITERATE_KEY 关联
+      track(target, ITERATE_KEY);
+      return Reflect.ownKeys(target);
+    },
+    // delete 操作
+    deleteProperty(target, key) {
+      // 检查对象上是否存在该属性
+      const hadKey = Object.prototype.hasOwnProperty.call(target, key);
+      // 完成对属性的删除
+      const res = Reflect.deleteProperty(target, key);
+
+      // 只有上述两个条件都成立时，才触发更新
+      if (hadKey && res) {
+        trigger(target, key, "DELETE");
+      }
+      return res;
+    },
+  });
+}
 
 // 在 get 函数内调用 track 函数追踪变化
 function track(target, key) {
@@ -327,15 +341,36 @@ function watch(source, cb, options = {}) {
 // });
 
 // for...in 循环
-effect(() => {
-  for (const key in obj) {
-    console.log("run effect, key: ", key);
-  }
-});
+// effect(() => {
+//   for (const key in obj) {
+//     console.log("run effect, key: ", key);
+//   }
+// });
 
 // add
 // obj.bar = true;
 // set
 // obj.foo = 2;
 // delete
-delete obj.foo;
+// delete obj.foo;
+
+// 3. 合理的触发响应
+// 3.1) 当值没变时不需要触发副作用函数
+// 3.2）新值与旧值不都是 NaN
+// effect(() => {
+//   console.log('----', obj.foo);
+// });
+// obj.foo = 1;
+
+// 3.3) 继承
+const obj = {};
+const proto = { bar: 1 };
+const child = reactive(obj);
+const parent = reactive(proto);
+Object.setPrototypeOf(child, parent);
+
+effect(() => {
+  console.log('---', child.bar);
+})
+
+child.bar = 2;
