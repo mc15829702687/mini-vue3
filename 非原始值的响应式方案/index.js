@@ -22,7 +22,8 @@ let ITERATE_KEY = Symbol();
 // 2. 对原始数据读取与设置
 // 存放副作用函数的桶
 let bucket = new WeakMap();
-const reactive = (data) => {
+// 封装 createReactive 函数，接收一个 isShallow 参数，代表是否是浅响应
+const createReactive = (data, isShallow = false) => {
   return new Proxy(data, {
     get(target, key, receiver) {
       // 代理对象可以通过 raw 属性访问原始数据
@@ -33,7 +34,18 @@ const reactive = (data) => {
       track(target, key);
 
       // 使用 Reflect 解决 this 指向
-      return Reflect.get(target, key, receiver);
+      const res = Reflect.get(target, key, receiver);
+
+      // 如果是浅响应直接返回原始值
+      if (isShallow) {
+        return res;
+      }
+
+      // 深响应
+      if (typeof res === 'object' && res !== null) {
+        return reactive(res);
+      }
+      return res;
       // return target[key];
     },
     set(target, key, value, receiver) {
@@ -363,14 +375,30 @@ function watch(source, cb, options = {}) {
 // obj.foo = 1;
 
 // 3.3) 继承
-const obj = {};
-const proto = { bar: 1 };
-const child = reactive(obj);
-const parent = reactive(proto);
-Object.setPrototypeOf(child, parent);
+// const obj = {};
+// const proto = { bar: 1 };
+// const child = reactive(obj);
+// const parent = reactive(proto);
+// Object.setPrototypeOf(child, parent);
+
+// effect(() => {
+//   console.log('---', child.bar);
+// })
+
+// child.bar = 2;
+
+// 4. 浅响应与深响应
+const reactive = (data) => {
+  return createReactive(data);
+}
+const shallowReactive = (data) => {
+  return createReactive(data, true);
+}
+const obj = reactive({ foo: { bar: 1 } });
+const shallowObj = shallowReactive({ foo: { bar: 1 } });
 
 effect(() => {
-  console.log('---', child.bar);
+  console.log(obj.foo.bar);
 })
-
-child.bar = 2;
+obj.foo.bar = 2;
+obj.foo = { bar: 3 }
