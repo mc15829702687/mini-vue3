@@ -69,9 +69,12 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
 
       const oldVal = target[key];
       // 如果属性不存在，则说明是新增，否则是修改属性
-      const type = Object.prototype.hasOwnProperty.call(target, key)
-        ? "SET"
-        : "ADD";
+      // 先判断是否是数组，再比较下标与当前数组长度，小于是 'SET', 大于是 'ADD'
+      const type = Array.isArray(target) ?
+        Number(key) < target.length ? 'SET' : 'ADD' :
+        Object.prototype.hasOwnProperty.call(target, key)
+          ? "SET"
+          : "ADD";
       // 先付新值
       // 使用 Reflect 解决 this 指向
       Reflect.set(target, key, value, receiver);
@@ -82,7 +85,8 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
         // 当旧值与新值不一样时，才触发副作用函数，并且旧值和新值不都是 NaN
         if (oldVal !== value && oldVal === oldVal && value === value) {
           // 将 type 作为第三个参数传递给 trigger 函数
-          trigger(target, key, type);
+          // 将新值作为第四个参数传递给 trigger 函数，用于改变数组的length监听
+          trigger(target, key, type, value);
         }
       }
 
@@ -144,7 +148,7 @@ function track(target, key) {
 }
 
 // 执行桶中的副作用函数
-function trigger(target, key, type) {
+function trigger(target, key, type, newValue) {
   // 根据 target 从桶中取得 depsMap，它是：Key => effects
   const depsMap = bucket.get(target);
   if (!depsMap) return;
@@ -170,6 +174,32 @@ function trigger(target, key, type) {
           effectsToRun.add(effectFn);
         }
       });
+  }
+
+  // 判断是否是数组，并且还是添加操作
+  if (Array.isArray(target) && type === 'ADD') {
+    // 获取到 length 属性的副作用函数
+    const lengthEffects = depsMap.get('length');
+    lengthEffects && lengthEffects.forEach(effectFn => {
+      if (activeEffect !== effectFn) {
+        effectsToRun.add(effectFn);
+      }
+    })
+  }
+
+  // 判断是否是数组，并且是修改 length 属性
+  if (Array.isArray(target) && key === 'length') {
+    depsMap.forEach((effects, key) => {
+      // 对于索引大于等于 length 值的元素
+      // 需要把相关联的副作用函数提取出来并添加到 effectsToRun 中待执行
+      if (key >= newValue) {
+        effects.forEach(effectFn => {
+          if (activeEffect !== effectFn) {
+            effectsToRun.add(effectFn);
+          }
+        })
+      }
+    })
   }
 
   effectsToRun.forEach((effectFn) => {
@@ -432,8 +462,16 @@ function shallowReadOnly(data) {
   return createReactive(data, true, true);
 }
 // const obj = readOnly({ foo: { bar: 1 } });
-const obj = shallowReadOnly({ foo: { bar: 1 } });
+// const obj = shallowReadOnly({ foo: { bar: 1 } });
+// effect(() => {
+//   console.log(obj.foo.bar);
+// })
+// obj.foo.bar = 2;
+
+// 6. 数组的索引与length
+const arr = reactive(['foo']);
 effect(() => {
-  console.log(obj.foo.bar);
+  console.log(arr[0]);
 })
-obj.foo.bar = 2;
+// arr[1] = 'bar';
+arr.length = 0;
