@@ -39,7 +39,7 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
       }
 
       // 非只读建立响应连接
-      if (!isReadOnly) {
+      if (!isReadOnly && typeof key !== 'symbol') {
         // 将副作用函数存储到 桶中
         track(target, key);
       }
@@ -100,7 +100,7 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
     // for...in
     ownKeys(target) {
       // 将 副作用函数与 ITERATE_KEY 关联
-      track(target, ITERATE_KEY);
+      track(target, Array.isArray(target) ? 'length' : ITERATE_KEY);
       return Reflect.ownKeys(target);
     },
     // delete 操作
@@ -469,9 +469,44 @@ function shallowReadOnly(data) {
 // obj.foo.bar = 2;
 
 // 6. 数组的索引与length
-const arr = reactive(['foo']);
+// const arr = reactive(['foo']);
+// effect(() => {
+//   console.log(arr[0]);
+// })
+// // arr[1] = 'bar';
+// arr.length = 0;
+
+// 7. 遍历数组
+// 1. for...in 循环
+// const arr = reactive(['foo']);
+// effect(() => {
+//   for (let key in arr) {
+//     console.log('key', key);
+//   }
+// })
+// console.log('---', Array.prototype.values === Array.prototype[Symbol.iterator]);
+// arr[100] = 100;
+// arr.length = 2;
+
+// 2.for...of 循环
+// for...of 是来遍历迭代对象的，一个对象能否被迭代，取决于该对象或对象的原型上是否实现了Symbol.iterator 这个方法
+// 模拟一个数组的迭代器 
+const arr = reactive([1, 2, 3]);
+// arr[Symbol.iterator] = function () {
+//   const target = this;
+//   const len = target.length;
+//   let index = 0;
+
+//   return {
+//     value: index < len ? target[index] : undefined,
+//     done: index++ >= len
+//   }
+// }
 effect(() => {
-  console.log(arr[0]);
+  for (let v of arr) {
+    console.log('v', v);
+  }
 })
-// arr[1] = 'bar';
+
+arr[1] = 'bar';
 arr.length = 0;
