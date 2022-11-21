@@ -22,6 +22,27 @@ let ITERATE_KEY = Symbol();
 // 2. 对原始数据读取与设置
 // 存放副作用函数的桶
 let bucket = new WeakMap();
+
+// 数组重写的方法
+const arrayInstrumentations = {};
+
+;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
+  const originMethod = Array.prototype[method];
+
+  arrayInstrumentations[method] = function (...args) {
+    // this 是代理对象，先在代理对象中查找，将结果存储到 res 中
+    let res = originMethod.apply(this, args);
+
+    // 如果没找到，通过 raw 属性，在原始对象中查找
+    if (res === false || res === -1) {
+      res = originMethod.apply(this.raw, args);
+    }
+
+    // 返回最终结果
+    return res;
+  }
+})
+
 /**
  * 
 // 封装 createReactive 函数
@@ -36,6 +57,12 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
       // 代理对象可以通过 raw 属性访问原始数据
       if (key === 'raw') {
         return target;
+      }
+
+      // 如果操作的目标对象是数组，并且 key 存在于 arrayInstrumentations 上，
+      // 那么返回定义在 arrayInstrumentations 上的值
+      if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
+        return Reflect.get(arrayInstrumentations, key, receiver);
       }
 
       // 非只读建立响应连接
@@ -440,9 +467,22 @@ function watch(source, cb, options = {}) {
 
 // child.bar = 2;
 
+// 定义一个 Map 实例，存储原始对象到代理对象的映射
+const reactiveMap = new Map();
 // 4. 浅响应与深响应
-const reactive = (data) => {
-  return createReactive(data);
+const reactive = (obj) => {
+  // 优先通过原始对象 obj，寻找代理对象，存在直接返回
+  const exisionProxy = reactiveMap.get(obj);
+  if (exisionProxy) {
+    return exisionProxy;
+  }
+
+  // 否则，则创建新的代理对象
+  const proxy = createReactive(obj);
+  // 存储到 Map 中，从而避免重复创建
+  reactiveMap.set(obj, proxy);
+
+  return proxy;
 }
 const shallowReactive = (data) => {
   return createReactive(data, true);
@@ -491,7 +531,7 @@ function shallowReadOnly(data) {
 // 2.for...of 循环
 // for...of 是来遍历迭代对象的，一个对象能否被迭代，取决于该对象或对象的原型上是否实现了Symbol.iterator 这个方法
 // 模拟一个数组的迭代器 
-const arr = reactive([1, 2, 3]);
+// const arr = reactive([1, 2, 3]);
 // arr[Symbol.iterator] = function () {
 //   const target = this;
 //   const len = target.length;
@@ -502,11 +542,26 @@ const arr = reactive([1, 2, 3]);
 //     done: index++ >= len
 //   }
 // }
-effect(() => {
-  for (let v of arr) {
-    console.log('v', v);
-  }
-})
+// effect(() => {
+//   for (let v of arr) {
+//     console.log('v', v);
+//   }
+// })
 
-arr[1] = 'bar';
-arr.length = 0;
+// arr[1] = 'bar';
+// arr.length = 0;
+
+// 8. 数组的查找方法
+// 8.1 访问数组的 length 属性
+// const arr = reactive([1, 2]);
+
+// effect(() => {
+//   console.log(arr.includes(1));
+// })
+// arr[0] = 3;   // 会触发副作用函数执行，会访问数组的 length 属性
+
+// 8.2 arr[0]拿到的始终是新的代理对象
+const obj = {};
+const arr = reactive([obj]);
+// console.log(arr.includes(arr[0]));    // true
+console.log(arr.includes(obj));   // false 因为 includes 内部的 this 指向的是代理对象 arr,并且在获取数组元素时得到的值也是代理对象，为此需要重写 includes 方法
