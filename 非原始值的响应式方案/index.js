@@ -41,6 +41,20 @@ const arrayInstrumentations = {};
     // 返回最终结果
     return res;
   }
+});
+
+// 一个标记变量，代表是否进行追踪，默认值为 true, 即允许进行追踪
+let shouldTrack = true;
+;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
+  const originMethod = Array.prototype[method];
+  arrayInstrumentations[method] = function (...args) {
+    // 在调用之前禁止追踪
+    shouldTrack = false;
+    let res = originMethod.apply(this, args);
+    // 调用之后允许追踪
+    shouldTrack = true;
+    return res;
+  }
 })
 
 /**
@@ -154,7 +168,8 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
 // 在 get 函数内调用 track 函数追踪变化
 function track(target, key) {
   // 如果没有 activeEffect 直接 return
-  if (!activeEffect) return target[key];
+  // 禁止追踪时，直接返回
+  if (!activeEffect || !shouldTrack) return target[key];
   // 从桶里取出 depsMap,它也是一个 Map 类型，key => effects
   let depsMap = bucket.get(target);
   if (!depsMap) {
@@ -561,7 +576,16 @@ function shallowReadOnly(data) {
 // arr[0] = 3;   // 会触发副作用函数执行，会访问数组的 length 属性
 
 // 8.2 arr[0]拿到的始终是新的代理对象
-const obj = {};
-const arr = reactive([obj]);
-// console.log(arr.includes(arr[0]));    // true
-console.log(arr.includes(obj));   // false 因为 includes 内部的 this 指向的是代理对象 arr,并且在获取数组元素时得到的值也是代理对象，为此需要重写 includes 方法
+// const obj = {};
+// const arr = reactive([obj]);
+// // console.log(arr.includes(arr[0]));    // true
+// console.log(arr.includes(obj));   // false 因为 includes 内部的 this 指向的是代理对象 arr,并且在获取数组元素时得到的值也是代理对象，为此需要重写 includes 方法
+
+// 8.3 隐形修改数组长度的原型方法
+const arr = reactive([]);
+effect(() => {
+  arr.push(1);
+})
+effect(() => {
+  arr.push(1);
+})
