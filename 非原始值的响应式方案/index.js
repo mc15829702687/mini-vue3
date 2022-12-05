@@ -98,6 +98,7 @@ const createReactive = (data, isShallow = false, isReadOnly = false) => {
         // 如果数据为只读，则调用 readOnly 进行递归调用
         return isReadOnly ? readOnly(res) : reactive(res);
       }
+
       return res;
       // return target[key];
     },
@@ -582,10 +583,34 @@ function shallowReadOnly(data) {
 // console.log(arr.includes(obj));   // false 因为 includes 内部的 this 指向的是代理对象 arr,并且在获取数组元素时得到的值也是代理对象，为此需要重写 includes 方法
 
 // 8.3 隐形修改数组长度的原型方法
-const arr = reactive([]);
-effect(() => {
-  arr.push(1);
+// const arr = reactive([]);
+// effect(() => {
+//   arr.push(1);
+// })
+// effect(() => {
+//   arr.push(1);
+// })
+
+// 9. 代理 Set 和 Map
+const s = new Set([1, 2, 3])
+const proxy = new Proxy(s, {
+  get(target, key, receiver) {
+    // 代理对象访问 size 属性，this 就是代理对象，而代理对象本身没有内部槽[[SetData]]
+    // 所以拦截，让其 this 指向 本身
+    if (key === 'size') {
+      return Reflect.get(target, key, target);
+    }
+    // 读取其他属性的默认行为
+    // return Reflect.get(target, key, receiver);
+    // 让其始终指向 target
+    return target[key].bind(target);
+  }
 })
-effect(() => {
-  arr.push(1);
-})
+/**
+ * Uncaught TypeError: Method get Set.prototype.size called on incompatible receiver #<Set>
+ * Set.prototype.size 其实是访问器属性，它的 set 访问器函数是 undefined
+ */
+// console.log(proxy.size);
+// 同上，this 指向还是代理对象，代理对象本身没有 delete 方法
+proxy.delete(1);
+console.log(proxy.size);
