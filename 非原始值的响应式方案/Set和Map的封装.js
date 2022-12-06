@@ -40,6 +40,37 @@ const mutableInstrumentations = {
     }
     // 返回操作结果
     return res;
+  },
+  // Map 数据类型的 get 和 set 方法
+  get(key) {
+    // 获取原始值
+    const target = this.raw;
+    // 查看是否已经存在
+    const had = target.has(key);
+    // 依赖追踪
+    track(target, key);
+    if (had) {
+      const res = target.get(key);
+      return typeof res === 'object' ? reactive(res) : res;
+    }
+  },
+  set(key, value) {
+    const target = this.raw;
+    const had = target.has(key);
+    // 获取旧值
+    const oldValue = target.get(key);
+    // 假设 value 是响应式数据，通过 set 方法会把响应式数据设置到原始数据上，会造成原始数据污染
+    // 所以 value 必须为 原始数据
+    const rawValue = value.raw || value;
+    // 设置新值
+    target.set(key, rawValue);
+    if (!had) {
+      // 类型为添加
+      trigger(target, key, 'ADD');
+    } else if (value !== oldValue && (oldValue === oldValue && value === value)) {
+      // 类型为修改
+      trigger(target, key, 'SET');
+    }
   }
 }
 
@@ -91,9 +122,17 @@ function track(target, key) {
 function trigger(target, key, type) {
   const depsMap = bucket.get(target);
   if (!depsMap) return;
+  // 取得副作用函数的集合
+  const effects = depsMap.get(key);
 
   //  防止死循环，原因：副作用函数还没遍历完，就被收集了
   const effectsToRun = new Set();
+  effects &&
+    effects.forEach((effectFn) => {
+      if (activeEffect !== effectFn) {
+        effectsToRun.add(effectFn);
+      }
+    });
 
   // 当操作类型 type 为 ADD 时，会取出与 ITERATE_KEY 相关联的副作用函数并执行
   if (type === 'ADD' || type === 'DELETE') {
@@ -147,11 +186,20 @@ function effect(fn, options = {}) {
 // console.log(p.size);
 
 // 2. 建立响应连接
-const p = reactive(new Set([1, 2, 3]));
+// const p = reactive(new Set([1, 2, 3]));
+
+// effect(() => {
+//   console.log(p.size);
+// })
+
+// p.add(4);
+// p.delete(4);
+
+// 3. 避免污染原始数据
+const p = reactive(new Map([['key', 1]]));
 
 effect(() => {
-  console.log(p.size);
+  console.log(p.get('key'));
 })
 
-p.add(4);
-p.delete(4);
+p.set('key', 5);
