@@ -71,6 +71,18 @@ const mutableInstrumentations = {
       // 类型为修改
       trigger(target, key, 'SET');
     }
+  },
+  forEach(cb, thisArg) {
+    // wrap 函数用来把可代理的值转为响应式数据
+    const wrap = val => typeof val === 'object' ? reactive(val) : val;
+    const target = this.raw;
+    // 依赖追踪
+    track(target, ITERATE_KEY);
+    // 通过原始对象调用 forEach方法，并把 callback 传过去
+    target.forEach((v, k) => {
+      // 手动调用 callback 函数
+      cb.call(thisArg, wrap(v), wrap(k), this);
+    });
   }
 }
 
@@ -105,6 +117,7 @@ function reactive(obj) {
 
 // 依赖收集
 function track(target, key) {
+  if (!activeEffect) return target[key];
   let depsMap = bucket.get(target);
   if (!depsMap) {
     bucket.set(target, depsMap = new Map());
@@ -135,7 +148,12 @@ function trigger(target, key, type) {
     });
 
   // 当操作类型 type 为 ADD 时，会取出与 ITERATE_KEY 相关联的副作用函数并执行
-  if (type === 'ADD' || type === 'DELETE') {
+  if (
+    type === 'ADD' ||
+    type === 'DELETE' ||
+    // 如果操作类型是 SET，并且目标对象是 Map 数据类型
+    (type === 'SET' && Object.prototype.toString.call(target) === '[object Map]')
+  ) {
     const iterateEffects = depsMap.get(ITERATE_KEY);
     iterateEffects && iterateEffects.forEach(effectFn => {
       if (effectFn !== activeEffect) {
@@ -196,10 +214,36 @@ function effect(fn, options = {}) {
 // p.delete(4);
 
 // 3. 避免污染原始数据
-const p = reactive(new Map([['key', 1]]));
+// const p = reactive(new Map([['key', 1]]));
 
+// effect(() => {
+//   console.log(p.get('key'));
+// })
+
+// p.set('key', 5);
+
+// 4. forEach 循环
+// 4.1 值为非响应式数据
+// const m = reactive(new Map([[{
+//   key: 1
+// }, {
+//   value: 1
+// }]]))
+// effect(() => {
+//   m.forEach((value, key) => {
+//     console.log(value);
+//     console.log(key);
+//   })
+// })
+// m.set({ key: 2 }, { value: 2 })
+
+// 4.2 值为响应式数据
+const key = { key: 1 };
+const value = new Set([1, 2, 3]);
+const p = reactive(new Map([[key, value]]));
 effect(() => {
-  console.log(p.get('key'));
+  p.forEach(function (value, key) {
+    console.log(value.size);
+  })
 })
-
-p.set('key', 5);
+p.get(key).delete(1);
