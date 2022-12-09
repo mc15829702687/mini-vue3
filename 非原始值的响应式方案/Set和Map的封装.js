@@ -83,6 +83,87 @@ const mutableInstrumentations = {
       // 手动调用 callback 函数
       cb.call(thisArg, wrap(v), wrap(k), this);
     });
+  },
+  // 迭代器方法
+  // 可迭代协议：一个对象是否实现了 Symbol.iterator 方法
+  // 迭代器协议：一个对象实现了 next 方法
+  [Symbol.iterator]: iterationMethod,
+  entries: iterationMethod,
+  values: valuesIterationMethod,
+  keys: keysIterationMethod
+}
+
+function iterationMethod() {
+  const target = this.raw;
+  // 调用原始对象的迭代器方法
+  const itr = target[Symbol.iterator]();
+
+  // 封装一层，需求是 key 和 value 有可能是响应式数据
+  const wrap = val => typeof val === 'object' && val !== null ? reactive(val) : val;
+
+  // 调用 track 响应追踪
+  track(target, ITERATE_KEY);
+
+  // 返回自定义的迭代器
+  return {
+    next() {
+      // 调用原始对象迭代器的 next 方法，得到 value 和 done
+      const { value, done } = itr.next();
+      return {
+        value: value ? [wrap(value[0]), wrap(value[1])] : value,
+        done
+      }
+    },
+    // 实现可迭代协议
+    [Symbol.iterator]() {
+      return this;
+    }
+  }
+}
+
+function valuesIterationMethod() {
+  const target = this.raw;
+  const itr = target.values();
+
+  const wrap = val => typeof val === 'object' && val !== null ? reactive(val) : val;
+
+  // 调用 track 响应追踪
+  track(target, ITERATE_KEY);
+
+  return {
+    next() {
+      const { value, done } = itr.next();
+      return {
+        value: wrap(value),
+        done
+      }
+    },
+    [Symbol.iterator]() {
+      return this;
+    }
+  }
+}
+const MAP_KEY_ITERATE_KEY = Symbol();
+function keysIterationMethod() {
+  const target = this.raw;
+  const itr = target.keys();
+
+  const wrap = val => typeof val === 'object' && val !== null ? reactive(val) : val;
+
+  // 调用 track 响应追踪
+  track(target, MAP_KEY_ITERATE_KEY);
+
+  return {
+    next() {
+      const { value, done } = itr.next();
+      return {
+        value: wrap(value),
+        done
+      }
+    },
+    [Symbol.iterator]() {
+      return this;
+    }
   }
 }
 
@@ -155,6 +236,18 @@ function trigger(target, key, type) {
     (type === 'SET' && Object.prototype.toString.call(target) === '[object Map]')
   ) {
     const iterateEffects = depsMap.get(ITERATE_KEY);
+    iterateEffects && iterateEffects.forEach(effectFn => {
+      if (effectFn !== activeEffect) {
+        effectsToRun.add(effectFn);
+      }
+    })
+  }
+
+  // 当操作类型 type 为 ADD 时，会取出与 MAP_KEY_ITERATE_KEY 相关联的副作用函数并执行
+  if (
+    type === 'ADD' || type === 'DELETE'
+  ) {
+    const iterateEffects = depsMap.get(MAP_KEY_ITERATE_KEY);
     iterateEffects && iterateEffects.forEach(effectFn => {
       if (effectFn !== activeEffect) {
         effectsToRun.add(effectFn);
@@ -238,12 +331,44 @@ function effect(fn, options = {}) {
 // m.set({ key: 2 }, { value: 2 })
 
 // 4.2 值为响应式数据
-const key = { key: 1 };
-const value = new Set([1, 2, 3]);
-const p = reactive(new Map([[key, value]]));
+// const key = { key: 1 };
+// const value = new Set([1, 2, 3]);
+// const p = reactive(new Map([[key, value]]));
+// effect(() => {
+//   p.forEach(function (value, key) {
+//     console.log(value.size);
+//   })
+// })
+// p.get(key).delete(1);
+
+// 5. 迭代器方法
+// const p = new Map([['key1', 'value1'], ['key2', 'value2']]);
+// for (let [key, value] of p.entries()) {
+//   console.log(key, value);
+// }
+// const itr = p[Symbol.iterator]();
+// console.log(itr.next());
+// console.log(itr.next());
+// console.log(itr.next());
+// console.log(p[Symbol.iterator] === p.entries);  // true
+
+const p = reactive(new Map([['key1', 'value1'], ['key2', 'value2']]));
+// effect(() => {
+//   for (let [key, value] of p.entries()) {
+//     console.log(key, value);
+//   }
+// })
+// values 方法
+// effect(() => {
+//   for (let value of p.values()) {
+//     console.log(value);
+//   }
+// })
+// keys 方法
 effect(() => {
-  p.forEach(function (value, key) {
-    console.log(value.size);
-  })
+  for (let key of p.keys()) {
+    console.log(key);
+  }
 })
-p.get(key).delete(1);
+p.set('key2', 'value3');
+p.set('key3', 'value3');
