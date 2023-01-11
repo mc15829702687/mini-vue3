@@ -1,4 +1,4 @@
-// const { ref, effect } = VueReactivity;
+const { ref, effect } = VueReactivity;
 
 // const count = ref(1);
 // function renderer(domString, container) {
@@ -74,6 +74,25 @@ function createRenderer(options) {
     // 将元素添加到容器中
     insert(el, container);
   }
+  // 更新
+  function patchElement(n1, n2) {
+    const el = (n2.el = n1.el);
+    const oldProps = n1.props;
+    const newProps = n2.props;
+
+    // 更新 props
+    for (const key in newProps) {
+      if (newProps[key] !== oldProps[key]) {
+        patchProps(el, key, oldProps[key], newProps[key]);
+      }
+    }
+    for (const key in oldProps) {
+      if (!key in newProps) {
+        patchProps(el, key, oldProps[key], null);
+      }
+    }
+  }
+
   /**
    * 打补丁操作，当 n1 为 undefined时，说明是首次渲染
    * @param {*} n1 旧 vnode
@@ -81,11 +100,27 @@ function createRenderer(options) {
    * @param {*} container 渲染容器
    */
   function patch(n1, n2, container) {
-    // 如果 n1 不存在意味着挂载，则调用 mountElement 函数进行挂载
-    if (!n1) {
-      mountElement(n2, container);
+    if (n1 && n1.type !== n2.type) {
+      unmount(n1);
+      n1 = null;
+    }
+
+    // 代码运行到这，说明 n1 和 n2 所描述的内容相同
+    const { type } = n2;
+
+    // 如果 type 为字符串 则说明描述的普通标签元素
+    if (typeof type === "string") {
+      // 如果 n1 不存在意味着挂载，则调用 mountElement 函数进行挂载
+      if (!n1) {
+        mountElement(n2, container);
+      } else {
+        // n1 存在，意味着打补丁，暂时省略
+        patchElement(n1, n2);
+      }
+    } else if (typeof type === "object") {
+      // 描述的是组件
     } else {
-      // n1 存在，意味着打补丁，暂时省略
+      // 处理其他类型的 vnode
     }
   }
 
@@ -123,26 +158,6 @@ function createRenderer(options) {
 }
 
 // 2. 自定义渲染器
-const vnode = {
-  type: "h1",
-  props: {
-    id: "render",
-    class: normalizeClass(["foo", { bar: true, baz: false }]),
-  },
-  children: [
-    {
-      type: "p",
-      children: "Hello world!",
-    },
-    {
-      type: "button",
-      children: "按钮",
-      props: {
-        disabled: "",
-      },
-    },
-  ],
-};
 const renderer = createRenderer({
   // 用于创建元素
   createElement(tag) {
@@ -158,8 +173,55 @@ const renderer = createRenderer({
   },
   // 将属性设置相关操作封装到 patchProps 函数中，并作为渲染器选项传递
   patchProps(el, key, preValue, nextValue) {
+    // 处理事件，以 on 开头的属性
+    if (/^on/.test(key)) {
+      // 获取伪造事件函数
+      const invokers = el._vei || (el._vei = {});
+      let invoker = invokers[key];
+      // 获取事件名称
+      const name = key.slice(2).toLowerCase();
+
+      if (nextValue) {
+        if (!invoker) {
+          // 如果没有 invoker，则将一个伪造的 invoker 缓存到 el._vei
+          // vei 是 vue event invoker 的首字母缩写
+          invoker = el._vei[key] = (e) => {
+            // e.timeStamp 事件发生时间
+            // 如果事件发生时间早于事件处理函数的绑定时间，则不执行处理函数
+            if (e.timeStamp < invoker.attached) return;
+            // 如果 invoke.value 是数组的话，则遍历它并逐个调用事件处理函数
+            if (isArray(invoker.value)) {
+              invoker.value.forEach((fn) => fn(e));
+            } else {
+              // 当伪造的事件处理函数执行时，会执行真正的事件处理函数
+              invoker.value(e);
+            }
+          };
+          // 将真正的事件处理函数赋值给 invoker.value
+          invoker.value = nextValue;
+          // 添加 invoker.attached 属性，存储事件处理函数绑定的时间
+          invoker.attached = performance.now();
+          // 绑定 invoker 作为事件处理函数
+          el.addEventListener(name, invoker);
+        } else {
+          // 如果 invoker 存在，说明是更新操作，直接改变 invoker.value 的值即可
+          invoker.value = nextValue;
+        }
+      } else if (invoker) {
+        // 新的事件绑定函数不存在，且之前的绑定函数存在，则移除之前事件函数
+        el.removeEventListener(name, invoker);
+      }
+
+      // // 移除上次绑定事件的函数
+      // preValue && el.removeEventListener(name, preValue);
+      // // 绑定事件, nextValue 为事件处理函数
+      // el.addEventListener(name, nextValue);
+    } else if (key === "class") {
+      // className 性能优于, classList 和 setAttribute
+      el.className = nextValue || "";
+    }
     // 使用 shouldAsSetProps 判断是否按照 DOM Properties 方式设置
-    if (shouldSetAsProps(el, key, nextValue)) {
+    else if (shouldSetAsProps(el, key, nextValue)) {
       const type = typeof el[key];
       if (type === "boolean" && nextValue === "") {
         el[key] = true;
@@ -171,7 +233,38 @@ const renderer = createRenderer({
     }
   },
 });
-renderer.render(vnode, document.getElementById("app"));
+// const vnode = {
+//   type: "h1",
+//   props: {
+//     id: "render",
+//     class: normalizeClass(["foo", { bar: true, baz: false }]),
+//   },
+//   children: [
+//     {
+//       type: "p",
+//       children: "Hello world!",
+//     },
+//     {
+//       type: "button",
+//       children: "按钮",
+//       props: {
+//         disabled: false,
+//         onClick: [
+//           (e) => {
+//             alert("click1");
+//           },
+//           (e) => {
+//             alert("click2");
+//           },
+//         ],
+//         onContextmenu(e) {
+//           alert("contextmenu");
+//         },
+//       },
+//     },
+//   ],
+// };
+// renderer.render(vnode, document.getElementById("app"));
 
 // 3. 挂载元素子节点和属性
 
@@ -212,3 +305,50 @@ renderer.render(vnode, document.getElementById("app"));
  * 3) 不会移除绑定在 DOM 元素上的事件
  * 解决方法：使用 parentNode.removeChild，将 vnode 和真实 DOM 之间建立联系，即 vnode.el = dom
  */
+
+// 8. 区分 vnode 的类型
+/**
+ * 更新操作时，要确保 oldVnode.type 和 newVnode.type 一致
+ * type 区分类型: string 为真实元素，object 为组件等
+ */
+
+// 9. 事件的处理
+/**
+ * 1. 在 vnode.props 中，以 on 开头的属性视为事件
+ * 2. patchProps 中，通过截取 on后面事件名，监听事件
+ * 3. 性能优化，每次更新前都要移除上次事件函数，伪造一个事件处理函数 invoker
+ */
+
+// 10. 事件冒泡与更新时机问题
+/**
+ * 例子如下，事件会冒泡
+ * 原因：因为 bol 变量是响应式的，当值改变会触发 副作用函数执行，更新 DOM，添加父节点点击事件
+ * 解决方法：屏蔽所有绑定时间晚于事件触发时间的事件处理函数的执行
+ */
+const bol = ref(false);
+
+effect(() => {
+  const vnode = {
+    type: "div",
+    props: bol.value
+      ? {
+          onClick: (e) => {
+            console.log("div click");
+          },
+        }
+      : {},
+    children: [
+      {
+        type: "p",
+        props: {
+          onClick: () => {
+            bol.value = true;
+            console.log("p click");
+          },
+        },
+        children: "text",
+      },
+    ],
+  };
+  renderer.render(vnode, document.getElementById("app"));
+});
