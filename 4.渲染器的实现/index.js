@@ -1,4 +1,4 @@
-const { ref, effect } = VueReactivity;
+// const { ref, effect } = VueReactivity;
 
 // const count = ref(1);
 // function renderer(domString, container) {
@@ -47,7 +47,7 @@ function normalizeClass(classVal) {
 // 1.3 渲染器把虚拟DOM节点渲染为真实DOM节点的过程叫做挂载，也就是 mounted
 function createRenderer(options) {
   // 通过 options 得到操作 DOM 的API，目的是渲染器函数变为'通用'，通过 options 配置项可以跨平台使用
-  const { createElement, setTextContent, insert, patchProps } = options;
+  const { createElement, setElementText, insert, patchProps } = options;
   // 挂载
   function mountElement(vnode, container) {
     // 创建 dom, 真实 dom 和 vnode 之间建立联系
@@ -55,7 +55,7 @@ function createRenderer(options) {
     // children 为 字符串类型，代表元素具有文本节点
     if (typeof vnode.children === "string") {
       // 因此只需要设置元素的 textContent 属性即可
-      setTextContent(el, vnode.children);
+      setElementText(el, vnode.children);
     } else if (Array.isArray(vnode.children)) {
       vnode.children.forEach((child) => {
         // 递归调用，渲染子元素
@@ -80,7 +80,7 @@ function createRenderer(options) {
     const oldProps = n1.props;
     const newProps = n2.props;
 
-    // 更新 props
+    // 1. 更新 props
     for (const key in newProps) {
       if (newProps[key] !== oldProps[key]) {
         patchProps(el, key, oldProps[key], newProps[key]);
@@ -91,6 +91,64 @@ function createRenderer(options) {
         patchProps(el, key, oldProps[key], null);
       }
     }
+
+    // 2. 更新子节点
+    patchChildren(n1, n2, el);
+  }
+
+  /**
+   * 更新子节点
+   * @param {*} n1 旧节点
+   * @param {*} n2 新节点
+   * @param {*} container 正在打补丁的 DOM 元素
+   */
+  function patchChildren(n1, n2, container) {
+    // 新节点为文本节点
+    if (typeof n2.children === "string") {
+      // 旧子节点有三种类型：没有子节点，文本节点，一组子节点
+      // 只有一组子节点的情况才要逐个卸载
+      if (isArray(n1.children)) {
+        n1.children.forEach((c) => unmount(c));
+      }
+      // 最后将文本节点的内容设置给容器
+      setElementText(container, n2.children);
+    } else if (isArray(n2.children)) {
+      // 新节点为一组子节点
+      // 旧节点也为一组子节点
+      if (isArray(n1.children)) {
+        // diff 算法去更新
+        n1.children.forEach((c) => unmount(c));
+        n2.children.forEach((c) => patch(null, c, container));
+      } else {
+        // 旧节点为文本节点，或者没有子节点
+        // 将容器清空，再将子节点逐个挂载
+        setElementText(container, "");
+        n2.children.forEach((c) => patch(null, c, container));
+      }
+    } else {
+      // 新子节点不存在
+      // 旧子节点是一组子节点，逐个卸载
+      if (isArray(n1.children)) {
+        n1.children.forEach((c) => unmount(c));
+      } else if (isString(n1.children)) {
+        // 旧子节点是文本节点，直接清空
+        setElementText(container, "");
+      }
+      // 如果也没有旧子节点，什么也不做
+    }
+  }
+
+  /**
+   * 卸载操作
+   * @param {*} vnode
+   */
+  function unmount(vnode) {
+    // 根据 vnode 获取要卸载的真实 DOM
+    const el = vnode.el;
+    // 获取 el 的父元素
+    const parent = el.parentNode;
+    // 调用 removeChild 移除 el
+    if (parent) parent.removeChild(el);
   }
 
   /**
@@ -124,19 +182,6 @@ function createRenderer(options) {
     }
   }
 
-  /**
-   * 卸载操作
-   * @param {*} vnode
-   */
-  function unmount(vnode) {
-    // 根据 vnode 获取要卸载的真实 DOM
-    const el = vnode.el;
-    // 获取 el 的父元素
-    const parent = el.parentNode;
-    // 调用 removeChild 移除 el
-    if (parent) parent.removeChild(el);
-  }
-
   function render(vnode, container) {
     if (vnode) {
       // 新 vnode 存在，将其与旧 vnode 一起传递给 patch 函数，进行打补丁
@@ -164,7 +209,7 @@ const renderer = createRenderer({
     return document.createElement(tag);
   },
   // 用于设置元素的文本节点
-  setTextContent(el, text) {
+  setElementText(el, text) {
     el.textContent = text;
   },
   // 用于在给定的 parent 下添加指定元素
@@ -233,38 +278,38 @@ const renderer = createRenderer({
     }
   },
 });
-// const vnode = {
-//   type: "h1",
-//   props: {
-//     id: "render",
-//     class: normalizeClass(["foo", { bar: true, baz: false }]),
-//   },
-//   children: [
-//     {
-//       type: "p",
-//       children: "Hello world!",
-//     },
-//     {
-//       type: "button",
-//       children: "按钮",
-//       props: {
-//         disabled: false,
-//         onClick: [
-//           (e) => {
-//             alert("click1");
-//           },
-//           (e) => {
-//             alert("click2");
-//           },
-//         ],
-//         onContextmenu(e) {
-//           alert("contextmenu");
-//         },
-//       },
-//     },
-//   ],
-// };
-// renderer.render(vnode, document.getElementById("app"));
+const vnode = {
+  type: "h1",
+  props: {
+    id: "render",
+    class: normalizeClass(["foo", { bar: true, baz: false }]),
+  },
+  children: [
+    {
+      type: "p",
+      children: "Hello world!",
+    },
+    {
+      type: "button",
+      children: "按钮",
+      props: {
+        disabled: false,
+        onClick: [
+          (e) => {
+            alert("click1");
+          },
+          (e) => {
+            alert("click2");
+          },
+        ],
+        onContextmenu(e) {
+          alert("contextmenu");
+        },
+      },
+    },
+  ],
+};
+renderer.render(vnode, document.getElementById("app"));
 
 // 3. 挂载元素子节点和属性
 
@@ -325,30 +370,38 @@ const renderer = createRenderer({
  * 原因：因为 bol 变量是响应式的，当值改变会触发 副作用函数执行，更新 DOM，添加父节点点击事件
  * 解决方法：屏蔽所有绑定时间晚于事件触发时间的事件处理函数的执行
  */
-const bol = ref(false);
+// const bol = ref(false);
 
-effect(() => {
-  const vnode = {
-    type: "div",
-    props: bol.value
-      ? {
-          onClick: (e) => {
-            console.log("div click");
-          },
-        }
-      : {},
-    children: [
-      {
-        type: "p",
-        props: {
-          onClick: () => {
-            bol.value = true;
-            console.log("p click");
-          },
-        },
-        children: "text",
-      },
-    ],
-  };
-  renderer.render(vnode, document.getElementById("app"));
-});
+// effect(() => {
+//   const vnode = {
+//     type: "div",
+//     props: bol.value
+//       ? {
+//           onClick: (e) => {
+//             console.log("div click");
+//           },
+//         }
+//       : {},
+//     children: [
+//       {
+//         type: "p",
+//         props: {
+//           onClick: () => {
+//             bol.value = true;
+//             console.log("p click");
+//           },
+//         },
+//         children: "text",
+//       },
+//     ],
+//   };
+//   renderer.render(vnode, document.getElementById("app"));
+// });
+
+// 11. 更新子节点
+/**
+ *  1) 子节点有三种情况
+ *    * 没有子节点，children 为 null,
+ *    * 子节点为文本节点，children 为字符串
+ *    * 其他情况，无论是单个子节点，还是多个子节点都可用数组表示
+ */
