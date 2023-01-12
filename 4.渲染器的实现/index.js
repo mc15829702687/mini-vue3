@@ -177,8 +177,21 @@ function createRenderer(options) {
       }
     } else if (typeof type === "object") {
       // 描述的是组件
-    } else {
-      // 处理其他类型的 vnode
+    } else if (type === Text) {
+      // 文本节点
+      // 没有旧节点，说明是挂载
+      if (!n1) {
+        // 使用 createTextNode 创建文本节点
+        const el = (n2.el = document.createTextNode(n2.children));
+        // 将文本节点插入到容器中
+        insert(el, container);
+      } else {
+        // 如果旧 vnode 存在，只需要使用新文本节点来更新旧文本节点即可
+        const el = (n2.el = n1.el);
+        if (n1.children !== n2.children) {
+          el.nodeValue = n2.children;
+        }
+      }
     }
   }
 
@@ -404,4 +417,13 @@ renderer.render(vnode, document.getElementById("app"));
  *    * 没有子节点，children 为 null,
  *    * 子节点为文本节点，children 为字符串
  *    * 其他情况，无论是单个子节点，还是多个子节点都可用数组表示
+ */
+
+// 12. 文本节点和注释节点
+/**
+ * 文本节点和注释节点的 children 都是字符串，只能分别定义 type(Symbol) 来区别
+ * 文本节点：
+ *    1) 判断 type === Text，
+ *    2) 旧文本节点不存在，使用 createTextNode 创建节点，并插入容器
+ *    3) 旧文本节点存在，直接更新旧文本节点内容即可
  */
