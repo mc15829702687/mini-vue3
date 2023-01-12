@@ -1,4 +1,4 @@
-// const { ref, effect } = VueReactivity;
+const { ref, effect } = VueReactivity;
 
 // const count = ref(1);
 // function renderer(domString, container) {
@@ -127,7 +127,11 @@ function createRenderer(options) {
         // 1. deprecated：先卸载，再挂载(太耗性能)
         // n1.children.forEach((c) => unmount(c));
         // n2.children.forEach((c) => patch(null, c, container));
-        // 2. 调用 patch 方法
+
+        // 2. 调用 patch 方法，
+        //  1) 公用长度调用 patch 更新
+        //  2) newLen > oldLen, 超出部分挂载
+        //  3) newLen < oldLen，oleLen 超出部分卸载
         const oldChildren = n1.children;
         const newChildren = n2.children;
         // 旧的一组子节点长度
@@ -137,20 +141,35 @@ function createRenderer(options) {
         // 两组子节点的公共长度，即两组中较短的一组的长度
         const commonLen = Math.min(oldLen, newLen);
 
-        // 遍历 commonLen 次
-        for (let i = 0; i < commonLen; i++) {
-          patch(oldChildren[i], newChildren[i], container);
-        }
+        // // 遍历 commonLen 次
+        // for (let i = 0; i < commonLen; i++) {
+        //   patch(oldChildren[i], newChildren[i], container);
+        // }
 
-        // 如果新子节点长度大于旧子节点长度，说明有新子节点要挂载
-        if (newLen > oldLen) {
-          for (let i = commonLen; i < newLen; i++) {
-            patch(null, newChildren[i], container);
-          }
-        } else {
-          // 如果旧子节点长度大于新子节点长度，说明有旧子节点要卸载
-          for (let i = commonLen; i < oldLen; i++) {
-            unmount(oldChildren[i]);
+        // // 如果新子节点长度大于旧子节点长度，说明有新子节点要挂载
+        // if (newLen > oldLen) {
+        //   for (let i = commonLen; i < newLen; i++) {
+        //     patch(null, newChildren[i], container);
+        //   }
+        // } else {
+        //   // 如果旧子节点长度大于新子节点长度，说明有旧子节点要卸载
+        //   for (let i = commonLen; i < oldLen; i++) {
+        //     unmount(oldChildren[i]);
+        //   }
+        // }
+
+        // 3. DOM 复用与 key 的作用
+        // 遍历新的 children
+        for (let i = 0; i < newLen; i++) {
+          const newVNode = newChildren[i];
+          // 遍历旧的 children
+          for (let j = 0; j < oldLen; j++) {
+            const oldVNode = oldChildren[j];
+            // 如果找到形同的 key 值的两个节点，说明可以复用，但仍需调用 patch 函数更新
+            if (newVNode.key === oldVNode.key) {
+              patch(oldVNode, newVNode, container);
+              break;
+            }
           }
         }
       } else {
@@ -349,38 +368,38 @@ const renderer = createRenderer({
     }
   },
 });
-const vnode = {
-  type: "h1",
-  props: {
-    id: "render",
-    class: normalizeClass(["foo", { bar: true, baz: false }]),
-  },
-  children: [
-    {
-      type: "p",
-      children: "Hello world!",
-    },
-    {
-      type: "button",
-      children: "按钮",
-      props: {
-        disabled: false,
-        onClick: [
-          (e) => {
-            alert("click1");
-          },
-          (e) => {
-            alert("click2");
-          },
-        ],
-        onContextmenu(e) {
-          alert("contextmenu");
-        },
-      },
-    },
-  ],
-};
-renderer.render(vnode, document.getElementById("app"));
+// const vnode = {
+//   type: "h1",
+//   props: {
+//     id: "render",
+//     class: normalizeClass(["foo", { bar: true, baz: false }]),
+//   },
+//   children: [
+//     {
+//       type: "p",
+//       children: "Hello world!",
+//     },
+//     {
+//       type: "button",
+//       children: "按钮",
+//       props: {
+//         disabled: false,
+//         onClick: [
+//           (e) => {
+//             alert("click1");
+//           },
+//           (e) => {
+//             alert("click2");
+//           },
+//         ],
+//         onContextmenu(e) {
+//           alert("contextmenu");
+//         },
+//       },
+//     },
+//   ],
+// };
+// renderer.render(vnode, document.getElementById("app"));
 
 // 一、挂载与更新
 // 3. 挂载元素子节点和属性
@@ -520,3 +539,42 @@ renderer.render(vnode, document.getElementById("app"));
  *  ]                                             ]
  * }                                             }
  */
+
+// 2. DOM 复用和 key 的作用
+/**
+ * 假设：有新旧两组数据，如下所示，更新时，按着以前 patch 比较，type 不相等直接卸载再挂载，
+ * 需 6 次 DOM 操作，而只改变其 text 后，再移动只需 3 次，如果只比较 type 值，无法判断，
+ * 所以 key 的作用出现了，key 属性就像虚拟节点的 “身份证”号，只要两个虚拟节点的 type 和 key 相同
+ * 则认为两个虚拟节点是相同的
+ * oldVnode: {                                   newVnode: {
+ *  type: 'div',                                  type: 'div',
+ *  children: [                                   children: [
+ *    {type: 'p', children: '1', key: 1},                   {type: 'p', children: '3', key: 3},
+ *    {type: 'p', children: '2', key: 2},                   {type: 'p', children: '1', key: 1},
+ *    {type: 'p', children: '3', key: 3},                   {type: 'p', children: '2', key: 2},
+ *  ]                                             ]
+ * }                                             }
+ */
+const oldNode = {
+  type: "div",
+  children: [
+    { type: "p", children: "1", key: 1 },
+    { type: "p", children: "2", key: 2 },
+    { type: "p", children: "hello", key: 3 },
+  ],
+};
+const newNode = {
+  type: "div",
+  children: [
+    { type: "p", children: "word", key: 3 },
+    { type: "p", children: "1", key: 1 },
+    { type: "p", children: "2", key: 2 },
+  ],
+};
+effect(() => {
+  renderer.render(oldNode, document.getElementById("app"));
+});
+
+window.setTimeout(() => {
+  renderer.render(newNode, document.getElementById("app"));
+}, 3000);
