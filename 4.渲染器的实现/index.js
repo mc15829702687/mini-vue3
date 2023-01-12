@@ -200,6 +200,15 @@ function createRenderer(options) {
           setText(el, n2.children);
         }
       }
+    } else if (type === Fragment) {
+      // 片段
+      if (!n1) {
+        // 如果旧 vnode 不存在，则只需要将 Fragment 的 children 逐个挂载即可
+        n2.children.forEach((c) => patch(null, c, container));
+      } else {
+        // 如果旧 vnode 存在，则只需要更新 Fragment 的 children 即可
+        patchChildren(n1, n2, container);
+      }
     }
   }
 
@@ -442,4 +451,23 @@ renderer.render(vnode, document.getElementById("app"));
  *    1) 判断 type === Text，
  *    2) 旧文本节点不存在，使用 createTextNode 创建节点，并插入容器
  *    3) 旧文本节点存在，直接更新旧文本节点内容即可
+ */
+
+// 13. Fragment(片段)
+/**
+ * 类似于组件拥有多个根节点:
+ *  <template>
+ *    <li>1</li>
+ *    <li>2</li>
+ *    <li>3</li>
+ *  </template>
+ * vnode:
+ *  {
+ *    type: Fragment,
+ *    children: [
+ *      {type: 'li', children: 'item1'},
+ *      {type: 'li', children: 'item2'},
+ *      {type: 'li', children: 'item3'}
+ *    ]
+ *  }
  */
