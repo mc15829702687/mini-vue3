@@ -510,7 +510,7 @@ renderer.render(vnode, document.getElementById("app"));
 // 1. 减少 DOM 操作的性能开销
 /**
  * 假设：有新旧两组数据，如下所示，更新时，按着以前先全部卸载，再重新挂载，需要6次操作 DOM，
- * 而递归调用 patch 方法只需要三次
+ * 而递归调用 patch 方法只需要三次，判断新旧长度相等、新大于旧、旧大于新三种情况
  * oldVnode: {                                   newVnode: {
  *  type: 'div',                                  type: 'div',
  *  children: [                                   children: [
