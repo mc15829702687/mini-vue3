@@ -188,7 +188,7 @@ function createRenderer(options) {
       // 文本节点
       // 没有旧节点，说明是挂载
       if (!n1) {
-        // 使用 createTextNode 创建文本节点
+        // 使用 createText 创建文本节点
         createText(n2.children);
         // 将文本节点插入到容器中
         insert(el, container);
@@ -196,6 +196,7 @@ function createRenderer(options) {
         // 如果旧 vnode 存在，只需要使用新文本节点来更新旧文本节点即可
         const el = (n2.el = n1.el);
         if (n1.children !== n2.children) {
+          // 调用 setText 函数更新文本内容
           setText(el, n2.children);
         }
       }
