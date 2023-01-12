@@ -47,7 +47,14 @@ function normalizeClass(classVal) {
 // 1.3 渲染器把虚拟DOM节点渲染为真实DOM节点的过程叫做挂载，也就是 mounted
 function createRenderer(options) {
   // 通过 options 得到操作 DOM 的API，目的是渲染器函数变为'通用'，通过 options 配置项可以跨平台使用
-  const { createElement, setElementText, insert, patchProps } = options;
+  const {
+    createElement,
+    setElementText,
+    insert,
+    patchProps,
+    createText,
+    setText,
+  } = options;
   // 挂载
   function mountElement(vnode, container) {
     // 创建 dom, 真实 dom 和 vnode 之间建立联系
@@ -182,14 +189,14 @@ function createRenderer(options) {
       // 没有旧节点，说明是挂载
       if (!n1) {
         // 使用 createTextNode 创建文本节点
-        const el = (n2.el = document.createTextNode(n2.children));
+        createText(n2.children);
         // 将文本节点插入到容器中
         insert(el, container);
       } else {
         // 如果旧 vnode 存在，只需要使用新文本节点来更新旧文本节点即可
         const el = (n2.el = n1.el);
         if (n1.children !== n2.children) {
-          el.nodeValue = n2.children;
+          setText(el, n2.children);
         }
       }
     }
@@ -228,6 +235,14 @@ const renderer = createRenderer({
   // 用于在给定的 parent 下添加指定元素
   insert(el, parent, anchor = null) {
     parent.insertBefore(el, anchor);
+  },
+  // 创建文本节点
+  createText(text) {
+    return document.createTextNode(text);
+  },
+  // 修改文本内容
+  setText(el, text) {
+    el.nodeValue = text;
   },
   // 将属性设置相关操作封装到 patchProps 函数中，并作为渲染器选项传递
   patchProps(el, key, preValue, nextValue) {
