@@ -124,8 +124,35 @@ function createRenderer(options) {
       // 旧节点也为一组子节点
       if (isArray(n1.children)) {
         // diff 算法去更新
-        n1.children.forEach((c) => unmount(c));
-        n2.children.forEach((c) => patch(null, c, container));
+        // 1. deprecated：先卸载，再挂载(太耗性能)
+        // n1.children.forEach((c) => unmount(c));
+        // n2.children.forEach((c) => patch(null, c, container));
+        // 2. 调用 patch 方法
+        const oldChildren = n1.children;
+        const newChildren = n2.children;
+        // 旧的一组子节点长度
+        const oldLen = oldChildren.length;
+        // 新的一组子节点长度
+        const newLen = newChildren.length;
+        // 两组子节点的公共长度，即两组中较短的一组的长度
+        const commonLen = Math.min(oldLen, newLen);
+
+        // 遍历 commonLen 次
+        for (let i = 0; i < commonLen; i++) {
+          patch(oldChildren[i], newChildren[i], container);
+        }
+
+        // 如果新子节点长度大于旧子节点长度，说明有新子节点要挂载
+        if (newLen > oldLen) {
+          for (let i = commonLen; i < newLen; i++) {
+            patch(null, newChildren[i], container);
+          }
+        } else {
+          // 如果旧子节点长度大于新子节点长度，说明有旧子节点要卸载
+          for (let i = commonLen; i < oldLen; i++) {
+            unmount(oldChildren[i]);
+          }
+        }
       } else {
         // 旧节点为文本节点，或者没有子节点
         // 将容器清空，再将子节点逐个挂载
@@ -150,6 +177,12 @@ function createRenderer(options) {
    * @param {*} vnode
    */
   function unmount(vnode) {
+    // 在卸载时，如果卸载的 vnode 类型为 Fragment，则需要卸载其 children
+    if (vnode.type === Fragment) {
+      vnode.children.forEach((c) => unmount(c));
+      return;
+    }
+
     // 根据 vnode 获取要卸载的真实 DOM
     const el = vnode.el;
     // 获取 el 的父元素
@@ -179,7 +212,7 @@ function createRenderer(options) {
       if (!n1) {
         mountElement(n2, container);
       } else {
-        // n1 存在，意味着打补丁，暂时省略
+        // n1 存在，意味着打补丁
         patchElement(n1, n2);
       }
     } else if (typeof type === "object") {
@@ -349,6 +382,7 @@ const vnode = {
 };
 renderer.render(vnode, document.getElementById("app"));
 
+// 一、挂载与更新
 // 3. 挂载元素子节点和属性
 
 // 4. DOM Properties 和 HTML Attributes
@@ -470,4 +504,19 @@ renderer.render(vnode, document.getElementById("app"));
  *      {type: 'li', children: 'item3'}
  *    ]
  *  }
+ */
+
+// 二、简单 Diff 算法
+// 1. 减少 DOM 操作的性能开销
+/**
+ * 假设：有新旧两组数据，如下所示，更新时，按着以前先全部卸载，再重新挂载，需要6次操作 DOM，
+ * 而递归调用 patch 方法只需要三次
+ * oldVnode: {                                   newVnode: {
+ *  type: 'div',                                  type: 'div',
+ *  children: [                                   children: [
+ *    {type: 'p', children: '1'},                   {type: 'p', children: '4'},
+ *    {type: 'p', children: '2'},                   {type: 'p', children: '5'},
+ *    {type: 'p', children: '3'},                   {type: 'p', children: '6'},
+ *  ]                                             ]
+ * }                                             }
  */
