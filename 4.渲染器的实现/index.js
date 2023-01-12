@@ -158,7 +158,9 @@ function createRenderer(options) {
         //   }
         // }
 
-        // 3. DOM 复用与 key 的作用
+        // 3. Diff 算法
+        // 用来存储在寻找过程中遇到的最大索引值
+        let lastIndex = 0;
         // 遍历新的 children
         for (let i = 0; i < newLen; i++) {
           const newVNode = newChildren[i];
@@ -168,6 +170,16 @@ function createRenderer(options) {
             // 如果找到形同的 key 值的两个节点，说明可以复用，但仍需调用 patch 函数更新
             if (newVNode.key === oldVNode.key) {
               patch(oldVNode, newVNode, container);
+
+              if (j < lastIndex) {
+                // 如果当前节点在旧 children 中的索引小于最大索引值 lastIndex
+                // 说明该节点对应的真实 DOM 需要移动
+              } else {
+                // 如果当前找到的节点在旧 children 中的索引大于最大索引值，
+                // 则更新 lastIndex 的值
+                lastIndex = j;
+              }
+
               break;
             }
           }
@@ -578,3 +590,10 @@ effect(() => {
 window.setTimeout(() => {
   renderer.render(newNode, document.getElementById("app"));
 }, 3000);
+
+// 3. 找到需要移动的元素
+/**
+ * 在旧 children 中寻找具有相同 key 值节点的过程中，遇到的最大索引值
+ * 如果在后续寻找的过程中，存在索引值比当前遇到的最大索引值还要小的节点，
+ * 则意味着该节点需要移动
+ */
