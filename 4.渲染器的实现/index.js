@@ -174,6 +174,17 @@ function createRenderer(options) {
               if (j < lastIndex) {
                 // 如果当前节点在旧 children 中的索引小于最大索引值 lastIndex
                 // 说明该节点对应的真实 DOM 需要移动
+                // 先获取 newVNode 的前一个 vnode，即 prevNode
+                const prevNode = newChildren[i - 1];
+                // 如果 prevNode 不存在，则说明当前 newVNode 是第一个节点，他不需要移动
+                if (prevNode) {
+                  // 由于我们要将 newVNode 对应的真实 DOM 移动到 prevNode 所对应真实 DOM 后面，
+                  // 所以我们需要获取 prevNode 所对应真实 DOM 的下一个兄弟节点，并将其作为锚点
+                  const arhor = prevNode.el.nextSibling;
+                  // 调用 insert 方法将 newVNode 对应的真实 DOM 插入到锚点元素前面
+                  // 也就是 prevNode 对应的真实 DOM 的后面
+                  insert(newVNode.el, container, arhor);
+                }
               } else {
                 // 如果当前找到的节点在旧 children 中的索引大于最大索引值，
                 // 则更新 lastIndex 的值
@@ -596,4 +607,10 @@ window.setTimeout(() => {
  * 在旧 children 中寻找具有相同 key 值节点的过程中，遇到的最大索引值
  * 如果在后续寻找的过程中，存在索引值比当前遇到的最大索引值还要小的节点，
  * 则意味着该节点需要移动
+ */
+
+// 4. 移动元素
+/**
+ * 如果条件 j<lastIndex 成立，则说明当前 newVNode 所对应的真实 DOM 需要移动
+ *
  */
