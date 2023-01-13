@@ -56,7 +56,7 @@ function createRenderer(options) {
     setText,
   } = options;
   // 挂载
-  function mountElement(vnode, container) {
+  function mountElement(vnode, container, anchor) {
     // 创建 dom, 真实 dom 和 vnode 之间建立联系
     const el = (vnode.el = createElement(vnode.type));
     // children 为 字符串类型，代表元素具有文本节点
@@ -78,8 +78,8 @@ function createRenderer(options) {
       }
     }
 
-    // 将元素添加到容器中
-    insert(el, container);
+    // 在插入节点时，将锚点元素透传给 insert 函数
+    insert(el, container, anchor);
   }
   // 更新
   function patchElement(n1, n2) {
@@ -94,7 +94,7 @@ function createRenderer(options) {
       }
     }
     for (const key in oldProps) {
-      if (!key in newProps) {
+      if (!(key in newProps)) {
         patchProps(el, key, oldProps[key], null);
       }
     }
@@ -164,11 +164,15 @@ function createRenderer(options) {
         // 遍历新的 children
         for (let i = 0; i < newLen; i++) {
           const newVNode = newChildren[i];
+          // 新增节点标识
+          let find = false;
           // 遍历旧的 children
           for (let j = 0; j < oldLen; j++) {
             const oldVNode = oldChildren[j];
             // 如果找到形同的 key 值的两个节点，说明可以复用，但仍需调用 patch 函数更新
             if (newVNode.key === oldVNode.key) {
+              // 一旦找到可复用的节点，则将变量 find 的值设为 true
+              find = true;
               patch(oldVNode, newVNode, container);
 
               if (j < lastIndex) {
@@ -180,10 +184,10 @@ function createRenderer(options) {
                 if (prevNode) {
                   // 由于我们要将 newVNode 对应的真实 DOM 移动到 prevNode 所对应真实 DOM 后面，
                   // 所以我们需要获取 prevNode 所对应真实 DOM 的下一个兄弟节点，并将其作为锚点
-                  const arhor = prevNode.el.nextSibling;
+                  const anchor = prevNode.el.nextSibling;
                   // 调用 insert 方法将 newVNode 对应的真实 DOM 插入到锚点元素前面
                   // 也就是 prevNode 对应的真实 DOM 的后面
-                  insert(newVNode.el, container, arhor);
+                  insert(newVNode.el, container, anchor);
                 }
               } else {
                 // 如果当前找到的节点在旧 children 中的索引大于最大索引值，
@@ -193,6 +197,28 @@ function createRenderer(options) {
 
               break;
             }
+          }
+          // 如果代码运行到这里，find 仍然为 false
+          // 说明当前 newVNode 没有在旧的一组子节点中找到可复用的节点
+          // 也就是说，当前 newVNode 是新增节点，需要挂载
+          if (!find) {
+            // 为了将节点挂载到正确位置，我们需要先获取锚点元素
+            // 首先获取当前 newVNode 的前一个 vnode 节点
+            const prevNode = newChildren[i - 1];
+            let anchor = null;
+            if (prevNode) {
+              // 如果有前一个 vnode 节点，则使用它的下一个兄弟节点作为锚点元素
+              anchor = prevNode.el.nextSibling;
+            } else {
+              // 如果没有前一个 vnode 节点，说明即将挂载的新节点是第一个子节点
+              // 这时我们使用容器元素的第一个 firstChild 作为锚点
+              anchor = container.fistChild;
+            }
+
+            // 挂载 newVNode
+            // 注意：为什么不使用 insert 直接插入，因为 insert 函数第一个参数是 el
+            // 新增 vnode 还没创建 el，所以这里使用 patch 函数
+            patch(null, newVNode, container, anchor);
           }
         }
       } else {
@@ -238,8 +264,9 @@ function createRenderer(options) {
    * @param {*} n1 旧 vnode
    * @param {*} n2 新 vnode
    * @param {*} container 渲染容器
+   * @param {*} anchor 锚点
    */
-  function patch(n1, n2, container) {
+  function patch(n1, n2, container, anchor) {
     if (n1 && n1.type !== n2.type) {
       unmount(n1);
       n1 = null;
@@ -252,7 +279,7 @@ function createRenderer(options) {
     if (typeof type === "string") {
       // 如果 n1 不存在意味着挂载，则调用 mountElement 函数进行挂载
       if (!n1) {
-        mountElement(n2, container);
+        mountElement(n2, container, anchor);
       } else {
         // n1 存在，意味着打补丁
         patchElement(n1, n2);
@@ -384,7 +411,7 @@ const renderer = createRenderer({
       if (type === "boolean" && nextValue === "") {
         el[key] = true;
       } else {
-        el[key] = nextValue;
+        el[key] = nextValue || "";
       }
     } else {
       el.setAttribute(key, nextValue);
@@ -580,6 +607,7 @@ const renderer = createRenderer({
  */
 const oldNode = {
   type: "div",
+  props: {},
   children: [
     { type: "p", children: "1", key: 1 },
     { type: "p", children: "2", key: 2 },
@@ -588,9 +616,11 @@ const oldNode = {
 };
 const newNode = {
   type: "div",
+  props: { id: "wrapp" },
   children: [
     { type: "p", children: "word", key: 3 },
     { type: "p", children: "1", key: 1 },
+    { type: "p", children: "4", key: 4 },
     { type: "p", children: "2", key: 2 },
   ],
 };
@@ -612,5 +642,11 @@ window.setTimeout(() => {
 // 4. 移动元素
 /**
  * 如果条件 j<lastIndex 成立，则说明当前 newVNode 所对应的真实 DOM 需要移动
- *
+ */
+
+// 5. 添加新元素
+/**
+ * 1. 找到新增节点，定义变量 find，默认值为 false，在旧 children 中找到，find = true
+ * 2. find === false，意味着该节点为新增节点，改变其位置即可
+ * 3. 找到前一个 vnode，插入其后，没有找到前一个 vnode 说明是第一个，插入第一个位置即可
  */
