@@ -221,6 +221,19 @@ function createRenderer(options) {
             patch(null, newVNode, container, anchor);
           }
         }
+
+        // 上一步的更新操作完成后
+        // 遍历旧的一组子节点
+        for (let i = 0; i < oldLen; i++) {
+          const oldVNode = oldChildren[i];
+          // 拿旧子节点 oldVNode 去新的一组子节点中寻找具有相同 key 值的节点
+          const has = newChildren.find((c) => c.key === oldVNode.key);
+          if (!has) {
+            // 如果没有找到具有相同 key 值的节点，则说明需要删除该节点
+            // 调用 unmount 函数将其卸载
+            unmount(oldVNode);
+          }
+        }
       } else {
         // 旧节点为文本节点，或者没有子节点
         // 将容器清空，再将子节点逐个挂载
@@ -619,7 +632,7 @@ const newNode = {
   props: { id: "wrapp" },
   children: [
     { type: "p", children: "word", key: 3 },
-    { type: "p", children: "1", key: 1 },
+    // { type: "p", children: "1", key: 1 },
     { type: "p", children: "4", key: 4 },
     { type: "p", children: "2", key: 2 },
   ],
@@ -649,4 +662,10 @@ window.setTimeout(() => {
  * 1. 找到新增节点，定义变量 find，默认值为 false，在旧 children 中找到，find = true
  * 2. find === false，意味着该节点为新增节点，改变其位置即可
  * 3. 找到前一个 vnode，插入其后，没有找到前一个 vnode 说明是第一个，插入第一个位置即可
+ */
+
+// 6. 移除不存在元素
+/**
+ * 在上一步更新操作完成后，还需遍历旧的一组子节点
+ * 目的是检查旧子节点在新的一组子节点中是否仍然存在，如果已经不存在了，则调用 unmount 函数将其卸载
  */
