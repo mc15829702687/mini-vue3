@@ -465,9 +465,9 @@ const renderer = createRenderer({
 // renderer.render(vnode, document.getElementById("app"));
 
 // 一、挂载与更新
-// 3. 挂载元素子节点和属性
+// 1. 挂载元素子节点和属性
 
-// 4. DOM Properties 和 HTML Attributes
+// 2. DOM Properties 和 HTML Attributes
 // HTML Attributes 的作用是设置与之对应的 DOM Properties 的初始值
 // DOM Properties 得到的是当前值，getAttribute 得到的是初始值
 // const el = document.getElementById('my-input');
@@ -475,7 +475,7 @@ const renderer = createRenderer({
 //   console.log('my-input', el.getAttribute('value'));    // foo: 初始值
 // })
 
-// 5. 正确地设置元素属性
+// 3. 正确地设置元素属性
 /**
  * setAttribute痛点：设置的值会转换为字符串，例如：false => 'false'
  * el[key] = value 痛点：空字符串会转为 false，例如：<button disabled>按钮</button>
@@ -486,16 +486,17 @@ const renderer = createRenderer({
  *  3. 否则，调用 setAtrribute 方法
  */
 
-// 6. class 属性的设置
+// 4. class 属性的设置
 /**
  * Vue.js 中 class 属性的值有三种形式：
  *  1) 字符串，例如： 'foo bar'
  *  2) 对象，例如: {foo: true, bar: false}
  *  3) 数组，例如：['foo bar', {baz: true}]
- * 解决方法，序列化为字符串，即调用 normalizeClass 转为字符串
+ * 解决方法：序列化为字符串，即调用 normalizeClass 转为字符串
+ *
  */
 
-// 7. 卸载操作
+// 5. 卸载操作
 /**
  * 即 render(null, container)
  * 为什么不能使用 innerHTML = '' 来直接操作？
@@ -505,27 +506,26 @@ const renderer = createRenderer({
  * 解决方法：使用 parentNode.removeChild，将 vnode 和真实 DOM 之间建立联系，即 vnode.el = dom
  */
 
-// 8. 区分 vnode 的类型
+// 6. 区分 vnode 的类型
 /**
  * 更新操作时，要确保 oldVnode.type 和 newVnode.type 一致
  * type 区分类型: string 为真实元素，object 为组件等
  */
 
-// 9. 事件的处理
+// 7. 事件的处理
 /**
  * 1. 在 vnode.props 中，以 on 开头的属性视为事件
  * 2. patchProps 中，通过截取 on后面事件名，监听事件
  * 3. 性能优化，每次更新前都要移除上次事件函数，伪造一个事件处理函数 invoker
  */
 
-// 10. 事件冒泡与更新时机问题
+// 8. 事件冒泡与更新时机问题
 /**
  * 例子如下，事件会冒泡
  * 原因：因为 bol 变量是响应式的，当值改变会触发 副作用函数执行，更新 DOM，添加父节点点击事件
  * 解决方法：屏蔽所有绑定时间晚于事件触发时间的事件处理函数的执行
  */
 // const bol = ref(false);
-
 // effect(() => {
 //   const vnode = {
 //     type: "div",
@@ -552,7 +552,7 @@ const renderer = createRenderer({
 //   renderer.render(vnode, document.getElementById("app"));
 // });
 
-// 11. 更新子节点
+// 9. 更新子节点
 /**
  *  1) 子节点有三种情况
  *    * 没有子节点，children 为 null,
@@ -560,7 +560,7 @@ const renderer = createRenderer({
  *    * 其他情况，无论是单个子节点，还是多个子节点都可用数组表示
  */
 
-// 12. 文本节点和注释节点
+// 10. 文本节点和注释节点
 /**
  * 文本节点和注释节点的 children 都是字符串，只能分别定义 type(Symbol) 来区别
  * 文本节点：
@@ -569,7 +569,7 @@ const renderer = createRenderer({
  *    3) 旧文本节点存在，直接更新旧文本节点内容即可
  */
 
-// 13. Fragment(片段)
+// 11. Fragment(片段)
 /**
  * 类似于组件拥有多个根节点:
  *  <template>
@@ -677,3 +677,5 @@ window.setTimeout(() => {
  *  如果找到了，则记录该节点的位置索引，我们把这个位置索引称为最大索引。
  *  在整个更新过程中，如果一个节点的索引值小于最大索引，则说明该节点对应的真实 DOM 元素需要移动。
  */
+
+// 三、双端 Diff 算法
