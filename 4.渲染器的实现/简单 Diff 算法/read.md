@@ -19,7 +19,7 @@
 ### 2. DOM Properties 和 HTML Attributes
 
 1.  HTML Attributes 的作用是设置与之对应的 DOM Properties 的初始值
-2.  DOM Properties 得到的是当前值，getAttribute 得到的是初始值
+2.  DOM Properties 得到的是当前值，`getAttribute` 得到的是初始值
 
          const el = document.getElementById('my-input');
          el.addEventListener('change', () => {
@@ -28,14 +28,14 @@
 
 ### 3. 正确地设置元素属性
 
-setAttribute 痛点：设置的值会转换为字符串，例如：false => 'false'
-el[key] = value 痛点：空字符串会转为 false，例如：`<button disabled>按钮</button>`
+`setAttribute` 痛点：设置的值会转换为字符串，例如：false => 'false'
+`el[key] = value` 痛点：空字符串会转为 false，例如：`<button disabled>按钮</button>`
 另外，只读属性，例如表单 DOM 上的 form 属性，需要通过 setAttribute 设置
 解决思路：
 
 1.  先在 DOM Properties 上找是否有存在的属性，并且不为只读属性
 2.  找到后，如果值的类型为 boolean，并且 新值为 ''，则设置新值为 true
-3.  否则，调用 setAtrribute 方法
+3.  否则，调用 `setAtrribute` 方法
 
 ### 4. class 属性的设置
 
