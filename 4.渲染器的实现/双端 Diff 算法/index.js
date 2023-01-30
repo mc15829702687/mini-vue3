@@ -185,10 +185,15 @@ function createRenderer(options) {
     }
 
     // 循环结束后检查索引值的情况
-    if (oldStartIdx > oldEndIdx && newStartIdx >= newEndIdx) {
+    if (oldStartIdx > oldEndIdx && newStartIdx <= newEndIdx) {
       // 如果满足条件，说明有新的节点遗留，需要挂载它们
       for (let i = newStartIdx; i <= newEndIdx; i++) {
         patch(null, newChildren[i], container, oldStartVNode.el);
+      }
+    } else if (newStartIdx > newEndIdx && oldStartIdx <= oldEndIdx) {
+      // 移除操作
+      for (let i = oldStartIdx; i <= oldEndIdx; i++) {
+        unmount(oldChildren[i]);
       }
     }
   }

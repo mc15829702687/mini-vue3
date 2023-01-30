@@ -30,4 +30,12 @@
 ### 五、添加新元素
 
 1. 新头部节点查找，找不到，说明是新增元素，直接挂载；
-2. 满足 oldStartIdx > oldEndIdx && newStartIdx <= newEndIdx 条件时，说明是遗留节点，循环遍历直接挂载。
+2. 满足 `oldStartIdx > oldEndIdx && newStartIdx <= newEndIdx` 条件时，说明是遗留节点，循环遍历直接挂载。
+
+### 六、移除不存在元素
+
+满足 `newStartIdx > newEndIdx && oldStartIdx <= oldEndIdx` 条件时，说明这个区间的节点都应该被卸载，开启循环将其逐一卸载。
+
+### 七、总结
+
+双端 Diff 算法指的是，在新旧两组子节点的四个端点之间分别进行比较，并试图找到可复用的节点。相比简单 Diff 算法，双端 Diff 算法的优势在于，对于同样的更新场景，执行的 DOM 移动次数更少。
