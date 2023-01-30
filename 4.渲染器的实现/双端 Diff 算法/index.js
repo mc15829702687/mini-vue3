@@ -174,9 +174,21 @@ function createRenderer(options) {
           insert(vnodeToMove.el, container, oldStartVNode.el);
           // 由于位置 indexInOld 处的节点所对应的真实 DOM 已经移动到别处，因此将其设置为 undefined
           oldChildren[idxInold] = undefined;
-          // 最后更新 newStartIdx 到下一处位置
-          newStartVNode = newChildren[++newStartIdx];
+        } else {
+          // 将 newStartVNode 作为节点挂载到头部，使用当前头部节点 oldStartVNode
+          patch(null, newStartVNode, container, oldStartVNode.el);
         }
+
+        // 最后更新 newStartIdx 到下一处位置
+        newStartVNode = newChildren[++newStartIdx];
+      }
+    }
+
+    // 循环结束后检查索引值的情况
+    if (oldStartIdx > oldEndIdx && newStartIdx >= newEndIdx) {
+      // 如果满足条件，说明有新的节点遗留，需要挂载它们
+      for (let i = newStartIdx; i <= newEndIdx; i++) {
+        patch(null, newChildren[i], container, oldStartVNode.el);
       }
     }
   }
