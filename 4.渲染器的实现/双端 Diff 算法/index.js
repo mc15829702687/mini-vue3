@@ -116,7 +116,12 @@ function createRenderer(options) {
 
     // 双端比较
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-      if (oldStartVNode.key === newStartVNode.key) {
+      // 增加两个判断分支，如果头尾部节点为 undefined，则说明该节点已经被处理过了，直接跳到下一个位置
+      if (!oldStartVNode) {
+        oldStartVNode = oldChildren[++oldStartIdx];
+      } else if (!oldEndVNode) {
+        oldEndVNode = oldChildren[--oldEndIdx];
+      } else if (oldStartVNode.key === newStartVNode.key) {
         // 第一步：oldStartVNode 与 newStartVNode 比较
         patch(oldStartVNode, newStartVNode, container);
 
@@ -153,6 +158,25 @@ function createRenderer(options) {
         // 移动 DOM 完成后，更新索引值，并指向下一个位置
         oldEndVNode = oldChildren[--oldEndIdx];
         newStartVNode = newChildren[++newStartIdx];
+      } else {
+        // 遍历旧 children 试图寻找与 newStartVNode 拥有相同 key 值的元素
+        const idxInold = newChildren.findIndex(
+          (node) => node.key === newStartVNode.key
+        );
+
+        // idxInold 大于 0，说明找到可复用的节点，并且需要将其对应的真实 DOM 移动到头部
+        if (idxInold > 0) {
+          // idxInOld 位置对应的 vnode 就是需要移动的节点
+          const vnodeToMove = oldChildren[idxInold];
+          // 打补丁
+          patch(vnodeToMove, newStartVNode, container);
+          // 将 vnodeToMove.el 移动到头部节点 oldStartVNode.el 之前，因此使用厚着作为锚点
+          insert(vnodeToMove.el, container, oldStartVNode.el);
+          // 由于位置 indexInOld 处的节点所对应的真实 DOM 已经移动到别处，因此将其设置为 undefined
+          oldChildren[idxInold] = undefined;
+          // 最后更新 newStartIdx 到下一处位置
+          newStartVNode = newChildren[++newStartIdx];
+        }
       }
     }
   }
