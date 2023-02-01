@@ -145,6 +145,77 @@ function createRenderer(options) {
       while (j <= oldEnd) {
         unmount(oldChildren[j++]);
       }
+    } else {
+      // 处理非理想状况
+      // 新的一组子节点中剩余未处理节点的数量
+      const count = newEnd - j + 1;
+      // 存放旧数组对应的索引值
+      const source = new Array(count).fill(-1);
+
+      // // 方法一：利用双重循环填充 source 数组，该算法的时间复杂度是 O(n^2)
+      // oldStart 和 newStart 分别为起始索引，即 j
+      const oldStart = j;
+      const newStart = j;
+      // // 遍历旧的一组子节点
+      // for (let i = oldStart; i <= oldEnd; i++) {
+      //   const oldVNode = oldChildren[i];
+      //   for (let k = newStart; k <= newEnd; k++) {
+      //     const newVNode = newChildren[k];
+      //     // 找到拥有相同 key 值的可复用的节点
+      //     if (oldVNode.key === newVNode.key) {
+      //       // 调用 patch 进行更新
+      //       patch(oldVNode, newVNode, container);
+      //       // 最后填充 source 数组
+      //       source[k - newStart] = i;
+      //     }
+      //   }
+      // }
+
+      // 方法二：构建一张索引表，用来存储节点 key 和 节点位置索引之间的映射，时间复杂度为 O(n)
+      // 新增两个变量，moved 和 pos
+      let moved = false;
+      let pos = 0;
+
+      // 构建索引表
+      let keyInIdx = {};
+      for (let i = newStart; i <= newEnd; i++) {
+        keyInIdx[newChildren[i].key] = i;
+      }
+
+      // 代表更新过的节点数量
+      let patched = 0;
+      // 遍历旧的一组子节点中剩余未处理的节点
+      for (let i = oldStart; i <= oldEnd; i++) {
+        oldVNode = oldChildren[i];
+
+        // 如果更新过的节点数量小于等于需要更新的节点数量，则执行更新
+        if (patched <= count) {
+          // 通过索引表快速找到新的一组子节点中具有相同 key 值的节点位置
+          const k = keyInIdx[oldVNode.key];
+
+          if (typeof k !== "undefined") {
+            newVNode = newChildren[k];
+            // 调用 patch 函数完成更新
+            patch(oldVNode, newVNode, container);
+            // 每更新一个节点，都将 patched 变量 +1
+            patched++;
+            // 填充 source 数组
+            source[k - newStart] = k;
+
+            // 判断节点是否需要移动
+            if (k < pos) {
+              moved = true;
+            } else {
+              pos = k;
+            }
+          } else {
+            // 没找到直接卸载
+            unmount(oldVNode);
+          }
+        } else {
+          unmount(oldVNode);
+        }
+      }
     }
   }
 
