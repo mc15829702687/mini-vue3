@@ -216,6 +216,49 @@ function createRenderer(options) {
           unmount(oldVNode);
         }
       }
+
+      // moved 为 true，代表 DOM 需要移动
+      if (moved) {
+        // 计算最长递增子序列
+        let seq = lis(source);
+
+        // s 指向最长递增子序列的最后一个元素
+        let s = seq.length - 1;
+        // i 指向新的一组子节点中的最后一个元素
+        let i = count - 1;
+        for (; i >= 0; i--) {
+          if (source[i] === -1) {
+            // 说明索引为 i 的节点是全新节点，应该将其挂载
+            // 该节点在新 children 中的真实位置索引
+            const pos = newStart + i;
+            const newVNode = newChildren[pos];
+
+            // 该节点的下一个位置索引
+            const nextPos = pos + 1;
+            // 锚点
+            const anchor =
+              nextPos < newChildren.length ? newChildren[nextPos].el : null;
+            // 挂载
+            patch(null, newVNode, container, anchor);
+          } else if (i !== seq[s]) {
+            // 如果节点的索引 i 不等于 seq[s] 的值，说明该节点需要移动
+            const pos = newStart + i;
+            const newVNode = newChildren[pos];
+
+            // 下一个位置索引
+            const nextPos = pos + 1;
+            // 锚点
+            const anchor =
+              nextPos < newChildren.length ? newChildren[nextPos].el : null;
+            // 移动
+            insert(newVNode.el, container, anchor);
+          } else {
+            // 当 i === seq[s] 时，说明该位置的节点不需要移动
+            // 只需要让 s 指向下一个位置
+            s--;
+          }
+        }
+      }
     }
   }
 
