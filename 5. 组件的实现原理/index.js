@@ -323,10 +323,37 @@ function createRenderer(options) {
     // 通过 vnode 获取组件的选项对象，即 vnode.type
     const componentOptions = vnode.type;
     // 获取组件渲染函数
-    const { render, data } = componentOptions;
+    const {
+      render,
+      data,
+      beforeCreate,
+      created,
+      beforeMount,
+      mounted,
+      beforeUpdate,
+      updated,
+    } = componentOptions;
+
+    // 在这里调用 beforeCreate 钩子
+    beforeCreate && beforeCreate();
 
     // 调用 data 函数获得原始数据，并调用 reactive 函数将其包装为响应式数据
     const state = reactive(data());
+
+    // 定义组件实例，一个组件实例本质上就是一个对象，它包含与组件有关的状态信息
+    const instance = {
+      // 组件自身的状态数据
+      state,
+      // 代表是否挂载过
+      isMounted: false,
+      // render 函数返回的虚拟 DOM 节点
+      subTree: null,
+    };
+    // 将组件实例设置到 vnode 上，用于后续更新
+    vnode.component = instance;
+
+    // 这里调用 created 钩子
+    created && created();
 
     // 当组件内部响应式数据发生变化时，组件自更新
     effect(
@@ -335,8 +362,26 @@ function createRenderer(options) {
         // 从而 render 函数内部可以通过 this 访问其响应式数据
         // 执行渲染函数，获取组件要渲染的内容，即 render 函数返回的虚拟 DOM
         const subTree = render.call(state, state);
-        // 调用 patch 函数来挂载组件所描述的内容
-        patch(null, subTree, container, anchor);
+        // 检查组件是否已经被挂载
+        if (!instance.isMounted) {
+          // 在这里调用 beforeMount 钩子函数
+          beforeMount && beforeMount();
+          // 调用 patch 函数来挂载组件所描述的内容
+          patch(null, subTree, container, anchor);
+          // 设置为挂载过
+          instance.isMounted = true;
+          // 在这里调用 mounted 函数
+          mounted && mounted();
+        } else {
+          // 在这里调用 beforeUpdate 函数
+          beforeUpdate && beforeUpdate();
+          // 使用新的子树与上一次渲染的子树进行打补丁操作
+          patch(instance.subTree, subTree, container, anchor);
+          // 在这里调用 updated 函数
+          updated && updated();
+        }
+        // 更新组件实例的子树
+        instance.subTree = subTree;
       },
       {
         // 指定该副作用函数的调度器为 queueJob
