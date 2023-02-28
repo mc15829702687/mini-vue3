@@ -366,7 +366,9 @@ function createRenderer(options) {
     // setupState 用来存储由 setup 函数返回的值
     let setupState = null;
 
+    // 如果 setup 函数的返回值是函数，则将其作为渲染函数
     if (typeof setupResult === "function") {
+      // 报告冲突
       if (render) console.error("setup 函数返回渲染函数，render 选项将被忽略");
       render = setupResult;
     } else {
