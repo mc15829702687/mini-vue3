@@ -1,4 +1,4 @@
-const { ref, effect, reactive } = VueReactivity;
+const { ref, effect, reactive, shallowReactive } = VueReactivity;
 
 // 判断是否通过 DOM Properties 方式设置（el[key] = value）
 function shouldSetAsProps(el, key, value) {
@@ -332,10 +332,14 @@ function createRenderer(options) {
       mounted,
       beforeUpdate,
       updated,
+      props: propsOption,
     } = componentOptions;
 
     // 在这里调用 beforeCreate 钩子
     beforeCreate && beforeCreate();
+
+    // 调用 resolveProps 解析出 props 和 attrs
+    const [props, attrs] = resolveProps(propsOption, vnode.props);
 
     // 调用 data 函数获得原始数据，并调用 reactive 函数将其包装为响应式数据
     const state = reactive(data());
@@ -344,6 +348,8 @@ function createRenderer(options) {
     const instance = {
       // 组件自身的状态数据
       state,
+      // 将解析出的 props 数据包装为 shallowReactive 并定义到组件实例上
+      props: shallowReactive(props),
       // 代表是否挂载过
       isMounted: false,
       // render 函数返回的虚拟 DOM 节点
@@ -351,6 +357,34 @@ function createRenderer(options) {
     };
     // 将组件实例设置到 vnode 上，用于后续更新
     vnode.component = instance;
+
+    // 创建渲染上下文对象，本质是组件实例的代理
+    const renderContext = new Proxy(instance, {
+      get(t, k, r) {
+        // 获取组件自身状态与 props 数据
+        const { state, props } = t;
+        // 先尝试读取自身状态
+        if (state && k in state) {
+          return state[k];
+        } else if (props && k in props) {
+          // 尝试从 props 中读取
+          return props[k];
+        } else {
+          console.error("不存在~");
+        }
+      },
+      set(t, k, v, r) {
+        const { state, props } = t;
+
+        if (state && k in state) {
+          state[k] = v;
+        } else if (props && k in props) {
+          console.warn(`Attempting to mutate prop "${k}". Props are readonly`);
+        } else {
+          console.error("不存在");
+        }
+      },
+    });
 
     // 这里调用 created 钩子
     created && created();
@@ -388,6 +422,33 @@ function createRenderer(options) {
         scheduler: queueJob,
       }
     );
+  }
+
+  /**
+   * 更新组件
+   * @param {*} n1
+   * @param {*} n2
+   * @param {*} anchor
+   */
+  function patchComponent(n1, n2, anchor) {
+    // 获取组件实例
+    const instance = (n2.component = n1.component);
+    // 获取 props
+    const { props } = instance;
+
+    // 判断是否要更新
+    if (hasPropsChanged(n1.props, n2.props)) {
+      const [nextProps] = resolveProps(n2.type.propsOption, n2.props);
+      // 更新 props 数据
+      for (let k in nextProps) {
+        props[k] = nextProps[k];
+      }
+
+      // 移除不存在的 props
+      for (let k in props) {
+        if (!k in nextProps) delete props[k];
+      }
+    }
   }
 
   /**

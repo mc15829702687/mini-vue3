@@ -31,3 +31,37 @@ function queueJob(job) {
     });
   }
 }
+
+// resolveProps 函数解析 props 数据和 attrs 数据
+function resolveProps(propsOption, propsData) {
+  let props = {},
+    attrs = {};
+  // 遍历为组件传递的 props 数据
+  for (let key in propsData) {
+    if (key in propsOption) {
+      // 如果为组件传递的 props 数据在组件自身的 props 选项中有定义，将其视为合法的 props
+      props[key] = propsData[key];
+    } else {
+      // 否则将其作为 attrs 数据
+      attrs[key] = propsData[key];
+    }
+  }
+
+  return [props, attrs];
+}
+
+function hasPropsChanged(prevProps, nextProps) {
+  const nextKeys = Object.keys(nextProps);
+  // 如果新旧 props 数量变了，说明有变化
+  if (nextKeys.length !== Object.keys(prevProps).length) {
+    return true;
+  }
+
+  for (let k in nextProps) {
+    // 有不相等的 props，说明有变化
+    if (nextProps[key] !== prevProps[key]) {
+      return true;
+    }
+  }
+  return false;
+}
