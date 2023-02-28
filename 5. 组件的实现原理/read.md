@@ -39,3 +39,9 @@ renderer.render(CompVNode, document.querySelector('#app'))
 2. 解决方法：将组件实例挂载到组件上，根据实例判断是挂载还是更新操作。
 
 ### 四、props 与 组件的被动更新
+
+### 五、setup 函数
+
+1. 返回一个函数，代表 `render` 函数;
+2. 返回一个对象，代表存在模板；
+3. `setup`函数返回的数据状态应该暴露到渲染环境。

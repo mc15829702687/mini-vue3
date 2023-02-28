@@ -1,4 +1,5 @@
-const { ref, effect, reactive, shallowReactive } = VueReactivity;
+const { ref, effect, reactive, shallowReactive, shallowReadonly } =
+  VueReactivity;
 
 // 判断是否通过 DOM Properties 方式设置（el[key] = value）
 function shouldSetAsProps(el, key, value) {
@@ -333,6 +334,7 @@ function createRenderer(options) {
       beforeUpdate,
       updated,
       props: propsOption,
+      setup,
     } = componentOptions;
 
     // 在这里调用 beforeCreate 钩子
@@ -358,6 +360,19 @@ function createRenderer(options) {
     // 将组件实例设置到 vnode 上，用于后续更新
     vnode.component = instance;
 
+    const setupContext = { attrs };
+    // 调用 setup 函数
+    const setupResult = setup(shallowReadonly(instance.props), setupContext);
+    // setupState 用来存储由 setup 函数返回的值
+    let setupState = null;
+
+    if (typeof setupResult === "function") {
+      if (render) console.error("setup 函数返回渲染函数，render 选项将被忽略");
+      render = setupResult;
+    } else {
+      setupState = setupResult;
+    }
+
     // 创建渲染上下文对象，本质是组件实例的代理
     const renderContext = new Proxy(instance, {
       get(t, k, r) {
@@ -369,6 +384,8 @@ function createRenderer(options) {
         } else if (props && k in props) {
           // 尝试从 props 中读取
           return props[k];
+        } else if (setupState && k in setupState) {
+          return setupState[k];
         } else {
           console.error("不存在~");
         }
@@ -380,6 +397,8 @@ function createRenderer(options) {
           state[k] = v;
         } else if (props && k in props) {
           console.warn(`Attempting to mutate prop "${k}". Props are readonly`);
+        } else if (setupState && k in setupState) {
+          setupState[k] = v;
         } else {
           console.error("不存在");
         }
@@ -387,7 +406,7 @@ function createRenderer(options) {
     });
 
     // 这里调用 created 钩子
-    created && created();
+    created && created.call(renderContext);
 
     // 当组件内部响应式数据发生变化时，组件自更新
     effect(
