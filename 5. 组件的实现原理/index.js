@@ -346,6 +346,9 @@ function createRenderer(options) {
     // 调用 data 函数获得原始数据，并调用 reactive 函数将其包装为响应式数据
     const state = reactive(data());
 
+    // 使用编译好的 vnode.children 对象作为 slots 对象
+    const slots = vnode.children || {};
+
     // 定义组件实例，一个组件实例本质上就是一个对象，它包含与组件有关的状态信息
     const instance = {
       // 组件自身的状态数据
@@ -356,6 +359,7 @@ function createRenderer(options) {
       isMounted: false,
       // render 函数返回的虚拟 DOM 节点
       subTree: null,
+      slots,
     };
     // 将组件实例设置到 vnode 上，用于后续更新
     vnode.component = instance;
@@ -379,7 +383,7 @@ function createRenderer(options) {
     }
 
     // 将 emit 函数和 attrs 数据添加到 setupContext 中
-    const setupContext = { attrs, emit };
+    const setupContext = { attrs, emit, slots };
     // 调用 setup 函数
     const setupResult = setup(shallowReadonly(instance.props), setupContext);
     // setupState 用来存储由 setup 函数返回的值
@@ -398,7 +402,11 @@ function createRenderer(options) {
     const renderContext = new Proxy(instance, {
       get(t, k, r) {
         // 获取组件自身状态与 props 数据
-        const { state, props } = t;
+        const { state, props, slots } = t;
+
+        // 当 k 的值为 $slots 直接返回组件实例上的 slots
+        if (k === "$slots") return slots;
+
         // 先尝试读取自身状态
         if (state && k in state) {
           return state[k];

@@ -49,4 +49,41 @@ renderer.render(CompVNode, document.querySelector('#app'))
 ### 六、组件事件与 emit 的实现
 
 1. 定义 `emit` 函数，包含事件名称，处理事件函数参数；
-2. 以字符串 `on` 开头的 props，无论是否是显示声明，将其添加到 props 数据中.
+2. 以字符串 `on` 开头的 props，无论是否是显示声明，将其添加到 props 数据中。
+
+### 七、插槽的工作原理与实现
+
+1. 组件模板中的插槽内容会被编译为插槽函数，插槽函数的返回值就是具体的插槽内容；
+   例如：
+   vnode = {
+   type: MyComponent,
+   children: {
+   header() {
+   return {type: 'h1', children: '我是标题'}
+   },
+   body() {
+   return {type: 'section', children: '我是内容'}
+   },
+   footer() {
+   return {type: 'p', children: '我是注脚'}
+   }
+   }
+   }
+   MyComponent = {
+   render() {
+   return [
+   {
+   type: 'header',
+   children: [this.$slots.header()]
+   },
+   {
+   type: 'body',
+   children: [this.$slots.body()]
+   },
+   {
+   type: 'footer',
+   children: [this.$slots.footer()]
+   }
+   ]
+   }
+   }
