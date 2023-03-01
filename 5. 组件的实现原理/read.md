@@ -40,8 +40,13 @@ renderer.render(CompVNode, document.querySelector('#app'))
 
 ### 四、props 与 组件的被动更新
 
-### 五、setup 函数
+### 五、setup 函数的作用与实现
 
 1. 返回一个函数，代表 `render` 函数;
 2. 返回一个对象，代表存在模板；
 3. `setup`函数返回的数据状态应该暴露到渲染环境。
+
+### 六、组件事件与 emit 的实现
+
+1. 定义 `emit` 函数，包含事件名称，处理事件函数参数；
+2. 以字符串 `on` 开头的 props，无论是否是显示声明，将其添加到 props 数据中.

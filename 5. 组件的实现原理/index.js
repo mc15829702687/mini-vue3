@@ -360,7 +360,26 @@ function createRenderer(options) {
     // 将组件实例设置到 vnode 上，用于后续更新
     vnode.component = instance;
 
-    const setupContext = { attrs };
+    /**
+     * 定义 emit 函数
+     * @param {*} event 事件名称
+     * @param  {...any} payload 传递给事件处理函数的参数
+     */
+    function emit(event, ...payload) {
+      // 根据约定对事件名称进行处理，例如 change => onChange
+      const eventName = `on${event[0].toUppercase() + event.slice(1)}`;
+      // 在 props 中寻找对应的事件处理函数
+      const handler = instance.props[eventName];
+      if (handler) {
+        // 调用事件处理函数并传递参数
+        handler(...payload);
+      } else {
+        console.error("事件不存在~");
+      }
+    }
+
+    // 将 emit 函数和 attrs 数据添加到 setupContext 中
+    const setupContext = { attrs, emit };
     // 调用 setup 函数
     const setupResult = setup(shallowReadonly(instance.props), setupContext);
     // setupState 用来存储由 setup 函数返回的值

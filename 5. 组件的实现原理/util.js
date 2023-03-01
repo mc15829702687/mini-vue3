@@ -38,7 +38,8 @@ function resolveProps(propsOption, propsData) {
     attrs = {};
   // 遍历为组件传递的 props 数据
   for (let key in propsData) {
-    if (key in propsOption) {
+    // 以字符串 on 开头的 props，无论是否是显示声明，将其添加到 props 数据中
+    if (key in propsOption || key.startsWith("on")) {
       // 如果为组件传递的 props 数据在组件自身的 props 选项中有定义，将其视为合法的 props
       props[key] = propsData[key];
     } else {
