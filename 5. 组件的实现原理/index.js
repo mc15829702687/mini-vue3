@@ -360,6 +360,8 @@ function createRenderer(options) {
       // render 函数返回的虚拟 DOM 节点
       subTree: null,
       slots,
+      // 存储通过 onMounted 函数注册的生命周期钩子函数
+      mounted: [],
     };
     // 将组件实例设置到 vnode 上，用于后续更新
     vnode.component = instance;
@@ -384,8 +386,23 @@ function createRenderer(options) {
 
     // 将 emit 函数和 attrs 数据添加到 setupContext 中
     const setupContext = { attrs, emit, slots };
+
+    // 在调用 setup 函数前设置当前组件实例
+    setCurrentInstance(instance);
+    function onMounted(fn) {
+      if (currentInstance) {
+        // 将生命周期钩子函数添加到 mounted 数组中
+        instance.mounted.push(fn);
+      } else {
+        console.error("onMounted 函数只能在 setup 中调用");
+      }
+    }
+
     // 调用 setup 函数
     const setupResult = setup(shallowReadonly(instance.props), setupContext);
+    // setup 函数执行完毕后，重置当前组件实例
+    setCurrentInstance(null);
+
     // setupState 用来存储由 setup 函数返回的值
     let setupState = null;
 
@@ -454,6 +471,9 @@ function createRenderer(options) {
           instance.isMounted = true;
           // 在这里调用 mounted 函数
           mounted && mounted();
+          // 遍历 instance.mounted 数组并逐个执行即可
+          instance.mounted &&
+            instance.mounted.forEach((hook) => hook.call(renderContext));
         } else {
           // 在这里调用 beforeUpdate 函数
           beforeUpdate && beforeUpdate();

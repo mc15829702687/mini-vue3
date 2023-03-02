@@ -87,3 +87,9 @@ renderer.render(CompVNode, document.querySelector('#app'))
    ]
    }
    }
+
+### 八、注册生命周期
+
+1. 定义 `currentInstance` 存储当前组件实例；
+2. 将 生命钩子函数 存储到 `instance.mounted` 数组中；
+3. 在挂载后遍历数组逐个执行。

@@ -66,3 +66,10 @@ function hasPropsChanged(prevProps, nextProps) {
   }
   return false;
 }
+
+// 注册生命周期
+// 全局变量，存储当前正在被初始化的组件实例
+let currentInstance = null;
+function setCurrentInstance(instance) {
+  currentInstance = instance;
+}
