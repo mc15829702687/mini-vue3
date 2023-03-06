@@ -1,3 +1,5 @@
+import { ref } from "VueReactivity";
+
 /**
  * 最长递增子序列
  * @param {*} arr
@@ -72,4 +74,33 @@ function hasPropsChanged(prevProps, nextProps) {
 let currentInstance = null;
 function setCurrentInstance(instance) {
   currentInstance = instance;
+}
+
+/**
+ * 高阶组件
+ * 定义一个异步组件，接收一个异步组件加载器作为参数
+ * @param {*} loader
+ */
+function defineAsyncComponent(loader) {
+  // 用来存储异步加载的组件
+  let InnerComp = null;
+
+  // 返回一个包装组件
+  return {
+    name: "AsyncComponentWrapper",
+    setup() {
+      // 异步组件是否加载成功
+      const loaded = ref(false);
+      // 执行加载器函数，返回一个 Promise 实例
+      // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true，代表加载成功
+      loader().then((c) => {
+        InnerComp = c;
+        loaded.value = true;
+      });
+
+      //如果异步组件加载成功，则渲染该组件，否则渲染一个占位内容
+      return () =>
+        loaded.value ? { type: InnerComp } : { type: Text, children: "" };
+    },
+  };
 }
