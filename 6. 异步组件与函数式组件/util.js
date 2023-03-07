@@ -95,6 +95,34 @@ function defineAsyncComponent(options) {
   // 用来存储异步加载的组件
   let InnerComp = null;
 
+  // 记录重试次数
+  let retries = 0;
+  // 封装 load 函数用来加载异步组件
+  function load() {
+    return (
+      loader()
+        // 捕获加载器的错误
+        .catch((err) => {
+          // 如果用户指定了 onError 回调，则将控制权交给用户
+          if (options.onError) {
+            return new Promise((resolve, reject) => {
+              // 重试
+              const retry = () => {
+                resolve(load());
+                retries++;
+              };
+              // 失败
+              const fail = () => reject(err);
+              // 作为 onError 回调函数的参数，让用户决定下一步怎么做
+              options.onError(retry, fail, retries);
+            });
+          } else {
+            throw err;
+          }
+        })
+    );
+  }
+
   // 返回一个包装组件
   return {
     name: "AsyncComponentWrapper",
@@ -121,7 +149,7 @@ function defineAsyncComponent(options) {
 
       // 执行加载器函数，返回一个 Promise 实例
       // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true，代表加载成功
-      loader()
+      load()
         .then((c) => {
           InnerComp = c;
           loaded.value = true;

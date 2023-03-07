@@ -29,3 +29,9 @@
 
 - delay: 用于指定延迟展示 Loading 组件的时长
 - loadingComponent: 用于配置 Loading 组件
+
+#### 4. 重试机制
+
+配置项对象添加一个参数：
+
+- onError: 包含三个参数，retry、fail、retries
