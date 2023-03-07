@@ -22,3 +22,10 @@
 - loader: 指定异步组件的加载器
 - timeout: 单位 ms，指定超时时长
 - errorComponent: 指定一个 Error 组件，当错误发生时会渲染它
+
+#### 3. 延迟与 Loading 组件
+
+配置项对象添加两个参数：
+
+- delay: 用于指定延迟展示 Loading 组件的时长
+- loadingComponent: 用于配置 Loading 组件

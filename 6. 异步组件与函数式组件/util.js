@@ -105,6 +105,19 @@ function defineAsyncComponent(options) {
       // const timeout = ref(false);
       // 定义 error，当错误发生时，用来存储错误对象
       const error = shallowRef(null);
+      // 代表是否正在加载
+      const loading = ref(false);
+
+      let loadingTimer = null;
+      // 如果配置项中存在 delay，则开启一个定时器计时，当延迟到时后将 loading.value 设置为 true
+      if (options.delay) {
+        loadingTimer = setTimeout(() => {
+          loading.value = true;
+        }, options.delay);
+      } else {
+        // 如果配置项中没有 delay，则直接标记为加载中
+        loading.value = true;
+      }
 
       // 执行加载器函数，返回一个 Promise 实例
       // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true，代表加载成功
@@ -114,12 +127,17 @@ function defineAsyncComponent(options) {
           loaded.value = true;
         })
         // 添加 catch 语句捕获加载过程中的错误
-        .catch((err) => (error.value = err));
+        .catch((err) => (error.value = err))
+        .finally(() => {
+          loading.value = false;
+          // 加载完毕后，无论成功与否都要清除延迟定时器
+          clearTimeout(loadingTimer);
+        });
 
       let timer = null;
       if (options.timeout) {
         // 如果指定了超时时长，则开启一个定时器计时
-        timer = window.setTimeout(() => {
+        timer = setTimeout(() => {
           // 超时后创建一个错误对象
           error.value = new Error(
             `Async Component timed out after ${options.timeout}ms`
@@ -129,7 +147,7 @@ function defineAsyncComponent(options) {
         }, options.timeout);
       }
       // 包装组件被卸载时清除定时器
-      onUnMounted(() => window.clearTimeout(timer));
+      onUnMounted(() => clearTimeout(timer));
 
       // 占位内容
       const placeholder = { type: Text, children: "" };
@@ -145,6 +163,11 @@ function defineAsyncComponent(options) {
             props: {
               error: error.value,
             },
+          };
+        } else if (loading.value && options.loadingComponent) {
+          // 如果异步组件正在加载，并且用户指定了 Loading 组件，则渲染 Loading 组件
+          return {
+            type: options.loadingComponent,
           };
         } else {
           return placeholder;
