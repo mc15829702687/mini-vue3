@@ -1,4 +1,4 @@
-import { ref } from "VueReactivity";
+import { ref, onUnMounted, shallowRef } from "VueReactivity";
 
 /**
  * 最长递增子序列
@@ -79,9 +79,19 @@ function setCurrentInstance(instance) {
 /**
  * 高阶组件
  * 定义一个异步组件，接收一个异步组件加载器作为参数
- * @param {*} loader
+ * @param {*} options
  */
-function defineAsyncComponent(loader) {
+function defineAsyncComponent(options) {
+  // options 可以是配置项，也可以是加载器
+  if (typeof options === "function") {
+    // 如果 options 是加载器，将其格式化为 配置项对象
+    options = {
+      loader: options,
+    };
+  }
+
+  const { loader } = options;
+
   // 用来存储异步加载的组件
   let InnerComp = null;
 
@@ -91,16 +101,55 @@ function defineAsyncComponent(loader) {
     setup() {
       // 异步组件是否加载成功
       const loaded = ref(false);
+      // 代表是否超时
+      // const timeout = ref(false);
+      // 定义 error，当错误发生时，用来存储错误对象
+      const error = shallowRef(null);
+
       // 执行加载器函数，返回一个 Promise 实例
       // 加载成功后，将加载成功的组件赋值给 InnerComp，并将 loaded 标记为 true，代表加载成功
-      loader().then((c) => {
-        InnerComp = c;
-        loaded.value = true;
-      });
+      loader()
+        .then((c) => {
+          InnerComp = c;
+          loaded.value = true;
+        })
+        // 添加 catch 语句捕获加载过程中的错误
+        .catch((err) => (error.value = err));
 
-      //如果异步组件加载成功，则渲染该组件，否则渲染一个占位内容
-      return () =>
-        loaded.value ? { type: InnerComp } : { type: Text, children: "" };
+      let timer = null;
+      if (options.timeout) {
+        // 如果指定了超时时长，则开启一个定时器计时
+        timer = window.setTimeout(() => {
+          // 超时后创建一个错误对象
+          error.value = new Error(
+            `Async Component timed out after ${options.timeout}ms`
+          );
+          // 超时后将 timeout 设置为 true
+          // timeout.value = true;
+        }, options.timeout);
+      }
+      // 包装组件被卸载时清除定时器
+      onUnMounted(() => window.clearTimeout(timer));
+
+      // 占位内容
+      const placeholder = { type: Text, children: "" };
+
+      return () => {
+        if (loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp };
+        } else if (error.value && options.errorComponent) {
+          // 只有当错误存在且用户配置了 errorComponent 时才展示 Error 组件，同时将 error 作为 props 传递
+          return {
+            type: options.errorComponent,
+            props: {
+              error: error.value,
+            },
+          };
+        } else {
+          return placeholder;
+        }
+      };
     },
   };
 }
