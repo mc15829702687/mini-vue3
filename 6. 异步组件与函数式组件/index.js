@@ -325,8 +325,20 @@ function createRenderer(options) {
    * @param {*} anchor 锚点
    */
   function mountComponent(vnode, container, anchor) {
+    // 检查是否是函数式组件
+    const isFunctional = typeof vnode.type === "function";
+
     // 通过 vnode 获取组件的选项对象，即 vnode.type
-    const componentOptions = vnode.type;
+    let componentOptions = vnode.type;
+
+    // 如果是函数式组件，则将 vnode.type 作为渲染函数，将 vnode.type.props 作为 props 的选项对象
+    if (isFunctional) {
+      componentOptions = {
+        render: vnode.type,
+        props: vnode.type.props,
+      };
+    }
+
     // 获取组件渲染函数
     const {
       render,
@@ -573,8 +585,8 @@ function createRenderer(options) {
         // 如果旧 vnode 存在，则只需要更新 Fragment 的 children 即可
         patchChildren(n1, n2, container);
       }
-    } else if (typeof type === "object") {
-      // vnode.type 是对象，作为组件来渲染
+    } else if (typeof type === "object" || typeof type === "function") {
+      // vnode.type 是对象或者是函数，作为组件来渲染
       if (!n1) {
         // 挂载组件
         mountComponent(n2, container, anchor);
